@@ -1,0 +1,9 @@
+[package]
+name = "auction-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auction-core = { path = "../auction-core" }
+auction-ai = { path = "../auction-ai" }
+rand = { workspace = true }

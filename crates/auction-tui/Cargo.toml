@@ -1,0 +1,16 @@
+[package]
+name = "auction-tui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "auction-sim"
+path = "src/main.rs"
+
+[dependencies]
+auction-core = { path = "../auction-core" }
+auction-ai = { path = "../auction-ai" }
+auction-engine = { path = "../auction-engine" }
+auction-education = { path = "../auction-education" }
+ratatui = "0.27"
+crossterm = "0.27"

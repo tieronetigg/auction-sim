@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/auction-core",
+    "crates/auction-ai",
+    "crates/auction-engine",
+    "crates/auction-education",
+    "crates/auction-tui",
+]
+
+[workspace.dependencies]
+rand = "0.8"
