@@ -212,13 +212,10 @@ pub fn IntroScreen(props: &IntroScreenProps) -> Html {
         })
     };
 
-    // Placeholder — will navigate to the live auction screen once implemented.
     let go_start = {
         let on_navigate = props.on_navigate.clone();
         Callback::from(move |_: MouseEvent| {
-            // TODO: navigate to Screen::Auction(auction_type) once live auction is built
-            let _ = auction_type;
-            on_navigate.emit(Screen::Menu); // stub: return to menu for now
+            on_navigate.emit(Screen::Auction(auction_type));
         })
     };
 

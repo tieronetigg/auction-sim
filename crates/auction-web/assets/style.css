@@ -419,6 +419,391 @@ button.mechanism-row:hover .mechanism-arrow {
   outline-offset: 2px;
 }
 
+/* ─── Auction screen ─────────────────────────────────────────────────────────*/
+.auction-header {
+  margin-bottom: var(--space-6);
+}
+
+.auction-item-name {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 400;
+  color: var(--color-ink-2);
+  margin-top: var(--space-1);
+}
+
+/* Standing bid + silence timer row */
+.auction-english-status {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  margin: var(--space-5) 0;
+}
+
+.auction-price-block {}
+
+.auction-price-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  margin-bottom: var(--space-1);
+}
+
+.auction-price {
+  font-size: var(--text-2xl);
+  line-height: 1;
+  color: var(--color-ink);
+  letter-spacing: -0.02em;
+}
+
+.auction-standing-bidder {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  margin-top: var(--space-1);
+}
+
+.auction-timer {}
+
+.auction-timer-value {
+  font-size: var(--text-2xl);
+  line-height: 1;
+  color: var(--color-ink-2);
+}
+
+.auction-timer-value--urgent {
+  color: oklch(52% 0.18 25);
+}
+
+.auction-value-row {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  margin-bottom: var(--space-4);
+}
+
+/* Education hints */
+.auction-hint {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-style: italic;
+  margin-bottom: var(--space-4);
+  color: var(--color-ink-3);
+}
+
+.auction-hint--info    { color: var(--color-ink-2); font-style: normal; }
+.auction-hint--caution { color: oklch(56% 0.13 55); font-style: normal; }
+.auction-hint--urgent  { color: oklch(52% 0.18 25); font-style: normal; font-weight: 500; }
+
+/* Input row */
+.auction-input-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.auction-input {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--color-ink);
+  background: var(--color-page);
+  border: 1px solid var(--color-rule);
+  padding: var(--space-2) var(--space-3);
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.auction-input:focus {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+  border-color: var(--color-accent);
+}
+
+.btn-raise, .btn-submit {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-page);
+  background: var(--color-ink);
+  border: none;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-5);
+  letter-spacing: 0.02em;
+  transition: background-color 120ms;
+}
+
+.btn-raise:hover, .btn-submit:hover { background-color: var(--color-accent); }
+.btn-raise:disabled, .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.auction-error {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: oklch(52% 0.18 25);
+  margin-bottom: var(--space-3);
+}
+
+.auction-bid-locked {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  font-style: italic;
+  margin-bottom: var(--space-4);
+}
+
+/* Dutch clock */
+.auction-dutch-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-8) 0 var(--space-6);
+  gap: var(--space-3);
+}
+
+.auction-clock-price {
+  font-size: 4rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--color-ink);
+}
+
+.auction-clock-meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-3);
+}
+
+.btn-call {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-page);
+  background: var(--color-ink);
+  border: none;
+  cursor: pointer;
+  padding: var(--space-3) var(--space-8);
+  letter-spacing: 0.02em;
+  margin-top: var(--space-3);
+  min-width: 240px;
+  transition: background-color 120ms;
+}
+
+.btn-call:hover { background-color: var(--color-accent); }
+
+/* Deadline bar */
+.auction-deadline {
+  margin: var(--space-5) 0 var(--space-4);
+}
+
+.auction-deadline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.auction-deadline-value {
+  font-size: var(--text-lg);
+  color: var(--color-ink);
+}
+
+.auction-deadline-value--urgent {
+  color: oklch(52% 0.18 25);
+}
+
+.auction-deadline-track {
+  height: 2px;
+  background: var(--color-rule);
+  width: 100%;
+}
+
+.auction-deadline-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 100ms linear;
+}
+
+/* Bid log */
+.auction-log {
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--color-rule);
+  padding-top: var(--space-5);
+}
+
+.auction-log-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  margin-bottom: var(--space-3);
+}
+
+.auction-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.auction-log-list li {
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+}
+
+.auction-log-list li.is-human {
+  color: var(--color-accent);
+}
+
+.auction-log-name {
+  min-width: 6rem;
+}
+
+.auction-no-bids {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-3);
+  font-style: italic;
+}
+
+.auction-closing {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-3);
+  padding-top: var(--space-9);
+  text-align: center;
+}
+
+/* ─── Debrief screen ─────────────────────────────────────────────────────────*/
+.debrief-section {
+  margin-bottom: var(--space-7);
+}
+
+.debrief-section-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  margin-bottom: var(--space-4);
+}
+
+.debrief-result-winner {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--color-ink);
+  margin-bottom: var(--space-2);
+}
+
+.debrief-result-price {
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-ink);
+  margin-bottom: var(--space-4);
+}
+
+.debrief-surplus {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  margin-bottom: var(--space-1);
+}
+
+.debrief-analysis-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.debrief-analysis-list li {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  line-height: 1.6;
+}
+
+.debrief-theory p {
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+  color: var(--color-ink-2);
+  line-height: 1.75;
+  max-width: 65ch;
+}
+
+/* Bidder table */
+.debrief-bidder-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1px solid var(--color-rule);
+}
+
+.debrief-bidder-table th {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  text-align: left;
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.debrief-bidder-table td {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink-2);
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.debrief-bidder-table td:first-child {
+  font-family: var(--font-sans);
+}
+
+.debrief-bidder-table tr.is-winner td { color: var(--color-ink); font-weight: 500; }
+.debrief-bidder-table tr.is-human  td { color: var(--color-accent); }
+
+.debrief-actions {
+  margin-top: var(--space-7);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-rule);
+}
+
+.btn-menu {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  background: none;
+  border: 1px solid var(--color-rule);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-5);
+  transition: color 120ms, border-color 120ms;
+}
+
+.btn-menu:hover {
+  color: var(--color-ink);
+  border-color: var(--color-ink-3);
+}
+
 /* ─── Utility: monospace numbers ─────────────────────────────────────────────
    Apply to any element displaying a monetary value or bid amount.
    Right-align in table cells for columnar readability.                        */
