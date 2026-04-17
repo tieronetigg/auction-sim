@@ -43,6 +43,8 @@ pub struct LiveAuctionState {
     pub input_error: Option<String>,
     /// Set to true after the human submits a sealed bid.
     pub bid_submitted: bool,
+    /// Reserve price enforced by this auction, if any (English only in current set).
+    pub reserve_price: Option<Money>,
 }
 
 impl LiveAuctionState {
@@ -159,7 +161,7 @@ fn make_item() -> Item {
     Item {
         id: ItemId(0),
         name: "Vintage Chronograph Watch".to_string(),
-        reserve_price: Some(Money(80.0)),
+        reserve_price: Some(Money(300.0)),
     }
 }
 
@@ -225,6 +227,7 @@ pub fn new_english_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: Some(Money(300.0)),
     }
 }
 
@@ -272,6 +275,7 @@ pub fn new_dutch_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: None,
     }
 }
 
@@ -336,6 +340,7 @@ pub fn new_fpsb_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: None,
     }
 }
 
@@ -382,6 +387,7 @@ pub fn new_vickrey_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: None,
     }
 }
 
@@ -428,6 +434,7 @@ pub fn new_allpay_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: None,
     }
 }
 
@@ -516,6 +523,7 @@ pub fn new_double_game() -> LiveAuctionState {
         bid_input: String::new(),
         input_error: None,
         bid_submitted: false,
+        reserve_price: None,
     }
 }
 
@@ -747,8 +755,8 @@ fn render_status_english(frame: &mut Frame, state: &LiveAuctionState, area: Rect
         ),
         Span::styled("    Silence: ", Style::default().fg(Color::DarkGray)),
         Span::styled(
-            format!("{:.1}s / 15s", vis.time_since_last_bid),
-            Style::default().fg(if vis.time_since_last_bid > 10.0 {
+            format!("{:.1}s / 25s", vis.time_since_last_bid),
+            Style::default().fg(if vis.time_since_last_bid > 15.0 {
                 Color::Red
             } else {
                 Color::White
@@ -756,18 +764,18 @@ fn render_status_english(frame: &mut Frame, state: &LiveAuctionState, area: Rect
         ),
     ]);
 
-    let bids_line = Line::from(vec![
+    let mut reserve_part = vec![
         Span::styled("  Bids placed: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{}", vis.bid_count),
-            Style::default().fg(Color::White),
-        ),
-        Span::styled("    Sim time: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            format!("{:.1}s", state.engine.current_time),
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]);
+        Span::styled(format!("{}", vis.bid_count), Style::default().fg(Color::White)),
+    ];
+    if let Some(r) = state.reserve_price {
+        reserve_part.push(Span::styled("    Reserve: ", Style::default().fg(Color::DarkGray)));
+        reserve_part.push(Span::styled(
+            format!("{}", r),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    let bids_line = Line::from(reserve_part);
 
     let para = Paragraph::new(vec![price_line, bids_line]);
     frame.render_widget(para, inner);
@@ -1481,9 +1489,11 @@ fn render_double(frame: &mut Frame, state: &LiveAuctionState) {
     render_input_sealed(frame, state, vert[3]);
 }
 
-// Seller IDs used in the double game (indices 4-7 = Dave, Eve, Fiona, Grant).
+/// BidderId index at which sellers begin in the double game (0-3 = buyers, 4-7 = sellers).
+const DOUBLE_SELLER_START: u32 = 4;
+
 fn is_double_seller(id: BidderId) -> bool {
-    id.0 >= 4
+    id.0 >= DOUBLE_SELLER_START
 }
 
 fn render_double_buyers(frame: &mut Frame, state: &LiveAuctionState, area: Rect) {

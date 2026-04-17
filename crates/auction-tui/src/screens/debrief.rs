@@ -19,6 +19,8 @@ pub struct DebriefState {
     pub human_id: BidderId,
     pub human_value: Money,
     pub ai_info: Vec<AiInfo>,
+    /// Reserve price enforced by this auction, if any (English only in current set).
+    pub reserve_price: Option<Money>,
     /// BidAccepted events (English, Dutch winner) in chronological order.
     pub accepted_bids: Vec<(SimTime, BidderId, Money)>,
     /// BidSubmitted events (FPSB, Vickrey, AllPay) — revealed at debrief.
@@ -45,6 +47,7 @@ impl DebriefState {
         human_id: BidderId,
         human_value: Money,
         ai_info: Vec<AiInfo>,
+        reserve_price: Option<Money>,
         event_log: &[(SimTime, AuctionEvent)],
     ) -> Self {
         let accepted_bids = event_log
@@ -79,6 +82,7 @@ impl DebriefState {
             human_id,
             human_value,
             ai_info,
+            reserve_price,
             accepted_bids,
             sealed_bids,
             sealed_asks,
@@ -149,15 +153,7 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
         }
     } else if let Some(alloc) = state.outcome.allocations.first() {
         let winner_name = name_of(alloc.bidder_id, state);
-        // Look up the winner's payment specifically — multi-payment auctions (all-pay)
-        // store every bidder's payment, so .first() would give the wrong amount.
-        let payment = state
-            .outcome
-            .payments
-            .iter()
-            .find(|p| p.bidder_id == alloc.bidder_id)
-            .map(|p| p.amount)
-            .unwrap_or(Money::zero());
+        let payment = winner_payment(&state.outcome, alloc.bidder_id);
         let winner_value = true_value_of(alloc.bidder_id, state);
         let is_human_win = alloc.bidder_id == state.human_id;
 
@@ -197,6 +193,12 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
             ),
         ]));
 
+        if let Some(r) = state.reserve_price {
+            lines.push(Line::from(vec![
+                Span::styled("  Reserve  : ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{} — met", r), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
         if is_human_win {
             lines.push(Line::from(""));
             lines.push(Line::from(vec![Span::styled(
@@ -204,6 +206,11 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
                 Style::default().fg(Color::Cyan),
             )]));
         }
+    } else if let Some(r) = state.reserve_price {
+        lines.push(Line::from(vec![Span::styled(
+            format!("  No winner — reserve price {} not met.", r),
+            Style::default().fg(Color::DarkGray),
+        )]));
     } else {
         lines.push(Line::from(vec![Span::styled(
             "  No winner — reserve price was not met.",
@@ -358,6 +365,44 @@ fn render_theory_english(lines: &mut Vec<Line>, state: &DebriefState) {
         "  revenue as a Vickrey (second-price sealed-bid) auction.",
         Style::default().fg(Color::DarkGray),
     )]));
+
+    if let Some(reserve) = state.reserve_price {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![Span::styled(
+            format!("  Reserve price: {} — the seller's floor.", reserve),
+            Style::default().fg(Color::DarkGray),
+        )]));
+
+        // Name any bidder whose true value falls below the reserve.
+        let excluded: Vec<&str> = state
+            .ai_info
+            .iter()
+            .filter(|a| a.value.0 < reserve.0)
+            .map(|a| a.name.as_str())
+            .collect();
+        if !excluded.is_empty() {
+            lines.push(Line::from(vec![Span::styled(
+                format!(
+                    "  Excluded this run: {} (value < {}).",
+                    excluded.join(", "),
+                    reserve
+                ),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
+        lines.push(Line::from(vec![Span::styled(
+            "  Efficiency tradeoff: if the highest-value bidder were below",
+            Style::default().fg(Color::DarkGray),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            "  the reserve, the item goes unsold — welfare destroyed to",
+            Style::default().fg(Color::DarkGray),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            "  raise the seller's expected revenue from high-value buyers.",
+            Style::default().fg(Color::DarkGray),
+        )]));
+    }
 }
 
 fn render_theory_dutch(lines: &mut Vec<Line>, state: &DebriefState) {
@@ -604,6 +649,17 @@ fn render_theory_double(lines: &mut Vec<Line>, state: &DebriefState) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Look up the payment for a specific bidder — safe for multi-payment auctions
+/// (e.g. all-pay, where every bidder has an entry in `payments`).
+fn winner_payment(outcome: &AuctionOutcome, winner_id: BidderId) -> Money {
+    outcome
+        .payments
+        .iter()
+        .find(|p| p.bidder_id == winner_id)
+        .map(|p| p.amount)
+        .unwrap_or(Money::zero())
+}
 
 fn name_of(id: BidderId, state: &DebriefState) -> String {
     if id == state.human_id {

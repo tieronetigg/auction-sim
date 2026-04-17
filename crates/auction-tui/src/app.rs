@@ -260,6 +260,7 @@ fn build_debrief(live: LiveAuctionState) -> DebriefState {
         live.human_id,
         live.human_value,
         live.ai_info,
+        live.reserve_price,
         &live.engine.event_log,
     )
 }

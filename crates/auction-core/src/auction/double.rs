@@ -52,8 +52,8 @@ impl DoubleAuction {
     fn resolve(&mut self) -> Vec<AuctionEvent> {
         self.phase = AuctionPhase::Complete;
 
-        let mut bids = self.buy_orders.clone();
-        let mut asks = self.sell_orders.clone();
+        let mut bids = std::mem::take(&mut self.buy_orders);
+        let mut asks = std::mem::take(&mut self.sell_orders);
 
         bids.sort_by(|a, b| b.amount.0.partial_cmp(&a.amount.0).unwrap_or(std::cmp::Ordering::Equal));
         asks.sort_by(|a, b| a.amount.0.partial_cmp(&b.amount.0).unwrap_or(std::cmp::Ordering::Equal));
