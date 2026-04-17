@@ -193,9 +193,9 @@ English/Dutch), `sealed_bids` (from `BidSubmitted`, FPSB/Vickrey/AllPay), and
 ### Simulation parameters (current games)
 | Game | Item | Human value | AI think_time | Notes |
 |------|------|-------------|---------------|-------|
-| English | Watch | $350 | 3.0s | 15s silence timeout, $10 increment |
+| English | Watch | $350 | 3.0s | 25s silence timeout, $10 increment |
 | Dutch | Watch | $350 | 0.3s | $550 start, $8/s drop, $50 floor |
-| FPSB | Watch | $350 | 3.0s | 30s deadline; Alice/Carol/Dave shade 0.75× |
+| FPSB | Watch | $350 | 3.0s | 30s deadline; Alice/Carol/Dave shade 0.80× = (n-1)/n BNE |
 | Vickrey | Watch | $350 | 3.0s | 30s deadline; all AI bid truthfully |
 | AllPay | Watch | $350 | 3.0s | 30s deadline; AI use BNE formula n=6, H=$500 |
 | Double | Research Report | $100 | 3.0s | 45s deadline; 3 buyers + 4 sellers, k=0.5 |

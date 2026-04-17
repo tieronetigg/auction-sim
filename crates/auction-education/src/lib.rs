@@ -258,6 +258,42 @@ pub fn debrief_insights(
             lines.push("No trades cleared — no bid met any ask.".to_string());
         }
 
+        // Derive competitive equilibrium range from true values.
+        // Buyers: human + ai_info where id.0 < 4; sellers: ai_info where id.0 >= 4.
+        let mut buyer_vals: Vec<f64> = vec![human_value.0];
+        let mut seller_vals: Vec<f64> = Vec::new();
+        for &(id, _, value) in ai_info {
+            if id.0 >= 4 {
+                seller_vals.push(value.0);
+            } else {
+                buyer_vals.push(value.0);
+            }
+        }
+        buyer_vals.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)); // desc
+        seller_vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)); // asc
+        let n_eq = buyer_vals
+            .iter()
+            .zip(seller_vals.iter())
+            .take_while(|(b, s)| b >= s)
+            .count();
+        if n_eq > 0 {
+            let ce_lo = Money(seller_vals[n_eq - 1]);
+            let ce_hi = Money(buyer_vals[n_eq - 1]);
+            let ce_mid = Money((ce_lo.0 + ce_hi.0) / 2.0);
+            lines.push(format!(
+                "Competitive equilibrium: {} trade(s), price range {}–{} \
+                 (marginal seller ask / marginal buyer value).",
+                n_eq, ce_lo, ce_hi
+            ));
+            lines.push(format!(
+                "k=0.5 sets clearing at midpoint of the marginal pair — theory predicts ~{}.",
+                ce_mid
+            ));
+            if n_trades > 0 && clearing.0 >= ce_lo.0 && clearing.0 <= ce_hi.0 {
+                lines.push("Actual clearing is within the CE range — efficient outcome.".to_string());
+            }
+        }
+
         if human_traded {
             let surplus = human_value - clearing;
             lines.push(format!(

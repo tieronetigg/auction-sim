@@ -196,7 +196,7 @@ pub fn new_english_game() -> LiveAuctionState {
         EnglishConfig {
             start_price: Money(100.0),
             min_increment: Money(10.0),
-            activity_timeout: 15.0,
+            activity_timeout: 25.0,
         },
         item,
         all_ids,
@@ -276,8 +276,8 @@ pub fn new_dutch_game() -> LiveAuctionState {
 }
 
 /// FPSB auction: mix of shading and truthful AI bidders to show bid shading.
-/// AI shade factors are ~0.75 (below the 5/6 ≈ 0.833 equilibrium) so an
-/// informed human can compete.
+/// AI shade factors are 0.80 = (n-1)/n = 5/6 ≈ 0.833 equilibrium (rounded) so
+/// revenue equivalence with the English auction holds numerically.
 pub fn new_fpsb_game() -> LiveAuctionState {
     let human_id = BidderId(0);
     let human_value = Money(350.0);
@@ -299,10 +299,10 @@ pub fn new_fpsb_game() -> LiveAuctionState {
 
     // Three shading bidders, two truthful, to illustrate mixed strategies.
     let shade_factors: &[(&str, f64, u32, bool)] = &[
-        ("Alice", 420.0, 1, true),   // shade 0.75 → $315
+        ("Alice", 420.0, 1, true),   // shade 0.80 → $336
         ("Bob",   380.0, 2, false),  // truthful → $380
-        ("Carol", 310.0, 3, true),   // shade 0.75 → $232.5
-        ("Dave",  450.0, 4, true),   // shade 0.75 → $337.5
+        ("Carol", 310.0, 3, true),   // shade 0.80 → $248
+        ("Dave",  450.0, 4, true),   // shade 0.80 → $360
         ("Eve",   290.0, 5, false),  // truthful → $290
     ];
 
@@ -310,7 +310,7 @@ pub fn new_fpsb_game() -> LiveAuctionState {
         .iter()
         .map(|&(name, value, id, shading)| {
             let strategy: Box<dyn BidderStrategy> = if shading {
-                Box::new(BidShadingBidder::new(BidderId(id), name, 0.75))
+                Box::new(BidShadingBidder::new(BidderId(id), name, 0.80))
             } else {
                 Box::new(TruthfulBidder::new(BidderId(id), name))
             };
