@@ -403,3 +403,133 @@ fn value_of(
         .map(|(_, _, v)| *v)
         .unwrap_or(Money::zero())
 }
+
+// ─────────────────────────────────────────────
+// Tests
+// ─────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use auction_core::outcome::{Allocation, Payment, Receipt};
+    use auction_core::types::ItemId;
+
+    fn outcome(allocations: Vec<(u32, f64)>, payments: Vec<(u32, f64)>) -> AuctionOutcome {
+        AuctionOutcome {
+            allocations: allocations
+                .into_iter()
+                .map(|(id, _)| Allocation { bidder_id: BidderId(id), item_id: ItemId(0) })
+                .collect(),
+            payments: payments
+                .into_iter()
+                .map(|(id, amt)| Payment { bidder_id: BidderId(id), amount: Money(amt) })
+                .collect(),
+            receipts: vec![],
+            revenue: Money::zero(),
+            social_welfare: None,
+            efficiency: None,
+        }
+    }
+
+    // ── All-pay loser ──────────────────────────────────────────────────────────
+
+    /// An all-pay loser should get a line mentioning what they paid, not "$0.00 surplus".
+    #[test]
+    fn allpay_loser_shows_payment_not_zero_surplus() {
+        let o = outcome(vec![(1, 100.0)], vec![(0, 50.0), (1, 100.0)]);
+        let ai = vec![(BidderId(1), "Alice", Money(150.0))];
+        let lines = debrief_insights(AuctionType::AllPay, &o, BidderId(0), Money(80.0), &ai);
+
+        let combined = lines.join(" ");
+        assert!(combined.contains("$50.00"), "expected paid amount in output: {combined}");
+        assert!(!combined.contains("$0.00"), "must not show zero surplus for all-pay loser: {combined}");
+    }
+
+    /// The all-pay winner gets a surplus line, not a "paid and received nothing" line.
+    #[test]
+    fn allpay_winner_shows_surplus() {
+        let o = outcome(vec![(0, 100.0)], vec![(0, 100.0), (1, 60.0)]);
+        let ai = vec![(BidderId(1), "Alice", Money(80.0))];
+        let lines = debrief_insights(AuctionType::AllPay, &o, BidderId(0), Money(150.0), &ai);
+
+        let combined = lines.join(" ");
+        assert!(combined.contains("surplus"), "winner should have surplus line: {combined}");
+    }
+
+    // ── Double auction CE range ────────────────────────────────────────────────
+
+    /// The competitive equilibrium count and price range are derived correctly
+    /// from true bidder values, independent of the actual submitted bids.
+    ///
+    /// Setup mirrors the live game:
+    ///   Buyers: human $100, Alice (1) $120, Bob (2) $110, Carol (3) $90
+    ///   Sellers: Dave (4) $35, Eve (5) $60, Fiona (6) $80, Grant (7) $105
+    ///   Sorted buyers desc: $120, $110, $100, $90
+    ///   Sorted sellers asc: $35,  $60,  $80,  $105
+    ///   Crossing pairs:     (120,35) (110,60) (100,80) — 3 cross; (90,105) doesn't
+    ///   CE range: [$80, $100], theory midpoint $90
+    #[test]
+    fn double_ce_range_from_live_game_values() {
+        // Clearing at $90 is within the CE range; outcome is 3 trades.
+        let o = AuctionOutcome {
+            allocations: vec![
+                Allocation { bidder_id: BidderId(0), item_id: ItemId(0) },
+                Allocation { bidder_id: BidderId(1), item_id: ItemId(0) },
+                Allocation { bidder_id: BidderId(2), item_id: ItemId(0) },
+            ],
+            payments: vec![
+                Payment { bidder_id: BidderId(0), amount: Money(90.0) },
+                Payment { bidder_id: BidderId(1), amount: Money(90.0) },
+                Payment { bidder_id: BidderId(2), amount: Money(90.0) },
+            ],
+            receipts: vec![
+                Receipt { bidder_id: BidderId(4), amount: Money(90.0) },
+                Receipt { bidder_id: BidderId(5), amount: Money(90.0) },
+                Receipt { bidder_id: BidderId(6), amount: Money(90.0) },
+            ],
+            revenue: Money(270.0),
+            social_welfare: None,
+            efficiency: None,
+        };
+
+        let ai = vec![
+            (BidderId(1), "Alice",  Money(120.0)),
+            (BidderId(2), "Bob",    Money(110.0)),
+            (BidderId(3), "Carol",  Money(90.0)),
+            (BidderId(4), "Dave",   Money(35.0)),
+            (BidderId(5), "Eve",    Money(60.0)),
+            (BidderId(6), "Fiona",  Money(80.0)),
+            (BidderId(7), "Grant",  Money(105.0)),
+        ];
+
+        let lines = debrief_insights(AuctionType::Double, &o, BidderId(0), Money(100.0), &ai);
+        let combined = lines.join(" ");
+
+        assert!(combined.contains("3"), "should mention 3 trades: {combined}");
+        assert!(combined.contains("$80.00"), "CE lower bound should be $80: {combined}");
+        assert!(combined.contains("$100.00"), "CE upper bound should be $100: {combined}");
+        assert!(combined.contains("$90.00"), "theory midpoint should be $90: {combined}");
+        assert!(combined.contains("efficient"), "outcome within CE range should be flagged efficient: {combined}");
+    }
+
+    /// When no pairs cross, the CE range is empty and no trades occur.
+    #[test]
+    fn double_no_crossing_no_ce() {
+        let o = AuctionOutcome {
+            allocations: vec![],
+            payments: vec![],
+            receipts: vec![],
+            revenue: Money::zero(),
+            social_welfare: None,
+            efficiency: None,
+        };
+        let ai = vec![
+            (BidderId(1), "Alice", Money(50.0)),   // buyer; value < seller ask
+            (BidderId(2), "Dave",  Money(200.0)),  // seller; ask > buyer value
+        ];
+
+        let lines = debrief_insights(AuctionType::Double, &o, BidderId(0), Money(40.0), &ai);
+        let combined = lines.join(" ");
+        assert!(combined.contains("No trades"), "should report no trades: {combined}");
+    }
+}
