@@ -6,6 +6,7 @@ members = [
     "crates/auction-engine",
     "crates/auction-education",
     "crates/auction-tui",
+    "crates/auction-web",
 ]
 
 [workspace.dependencies]

@@ -1,0 +1,16 @@
+[package]
+name = "auction-web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auction-core      = { path = "../auction-core" }
+auction-ai        = { path = "../auction-ai" }
+auction-engine    = { path = "../auction-engine" }
+auction-education = { path = "../auction-education" }
+yew               = { version = "0.23", features = ["csr"] }
+wasm-bindgen      = "0.2"
+
+# rand 0.8 pulls in getrandom; WASM needs the js backend explicitly.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
