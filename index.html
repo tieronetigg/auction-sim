@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auction Theory Simulator</title>
+    <meta name="description" content="Interactive auction theory simulator. Six mechanisms: English, Dutch, FPSB, Vickrey, All-Pay, Double." />
+    <link rel="stylesheet" href="/auction-sim/style-8a03c1a796791b51.css" integrity="sha384-ugkW6cEG7RUBdzCVOdsLUcwnUKpz5cCq1YFfFAMvUooMcTNpYnW/tN8ZQvg3XIRs"/>
+    
+<script type="module">
+import init, * as bindings from '/auction-sim/auction-web-c7692e435e6dbedd.js';
+const wasm = await init({ module_or_path: '/auction-sim/auction-web-c7692e435e6dbedd_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+  <link rel="modulepreload" href="/auction-sim/auction-web-c7692e435e6dbedd.js" crossorigin="anonymous" integrity="sha384-HsqYyLuORvN4YetHGnyrpDuwaTkIDz3yjTp+w6iD5Ivs13G7A1gjVKX7pPkh5mCd"><link rel="preload" href="/auction-sim/auction-web-c7692e435e6dbedd_bg.wasm" crossorigin="anonymous" integrity="sha384-zCKbAaCGMpenjngZ35BG1P15WgPkt14b9BItDyDff17Rrc0BpDGGI+LA4tzpMx1P" as="fetch" type="application/wasm"></head>
+  <body></body>
+</html>
