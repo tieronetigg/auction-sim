@@ -92,7 +92,7 @@ pub fn MenuScreen(props: &MenuScreenProps) -> Html {
                     <h1 class="menu-title">{"Auction Theory Simulator"}</h1>
                     <hr class="menu-rule" />
                     <p class="menu-subtitle">
-                        {"Six mechanisms. One item. You against five AI bidders. \
+                        {"Eight mechanisms. One item. You against five AI bidders. \
                           Each auction closes with a debrief explaining the mechanism, \
                           optimal strategy, and how your outcome compares to theory."}
                     </p>

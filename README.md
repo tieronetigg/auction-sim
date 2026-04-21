@@ -104,7 +104,7 @@ crates/
 
 ## Tech
 
-- Rust 2021 edition, MSRV 1.76
+- Rust 2021 edition. Documentation target: MSRV 1.76 (currently not CI-enforced)
 - TUI: [ratatui](https://github.com/ratatui-org/ratatui) + [crossterm](https://github.com/crossterm-rs/crossterm)
 - Web: [Yew](https://yew.rs) + [Trunk](https://trunkrs.dev), compiled to WASM
 - Deployed via GitHub Actions to GitHub Pages on every push to `main`
