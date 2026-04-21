@@ -144,8 +144,8 @@ body {
 
 .mechanism-row {
   display: grid;
-  grid-template-columns: var(--space-5) 10rem 1fr auto;
-  align-items: baseline;
+  grid-template-columns: var(--space-5) minmax(11.5rem, 13.5rem) minmax(0, 1fr) auto;
+  align-items: start;
   gap: 0 var(--space-4);
   padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--color-rule);
@@ -194,6 +194,8 @@ button.mechanism-row:hover .mechanism-arrow {
 .mechanism-dot[data-type="vickrey"] { color: var(--color-vickrey); }
 .mechanism-dot[data-type="allpay"]  { color: var(--color-allpay);  }
 .mechanism-dot[data-type="double"]  { color: var(--color-double);  }
+.mechanism-dot[data-type="combinatorial"] { color: var(--color-ink); }
+.mechanism-dot[data-type="vcg"] { color: var(--color-accent); }
 .mechanism-dot[data-type="stub"]    { color: var(--color-ink-3);   }
 
 .mechanism-name {
@@ -201,13 +203,16 @@ button.mechanism-row:hover .mechanism-arrow {
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-ink);
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .mechanism-desc {
   font-family: var(--font-serif);
   font-size: var(--text-sm);
   color: var(--color-ink-2);
+  line-height: 1.55;
+  min-width: 0;
 }
 
 .mechanism-arrow {
@@ -216,6 +221,7 @@ button.mechanism-row:hover .mechanism-arrow {
   color: var(--color-ink-3);
   transition: transform 120ms ease-out;
   white-space: nowrap;
+  padding-top: 0.1rem;
 }
 
 .mechanism-badge {
@@ -553,6 +559,51 @@ button.mechanism-row:hover .mechanism-arrow {
   margin-bottom: var(--space-4);
 }
 
+.comb-section {
+  margin: var(--space-5) 0;
+}
+
+.comb-pkg-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.comb-pkg-btn {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-3);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.comb-pkg-btn:hover {
+  border-color: var(--color-ink-3);
+  color: var(--color-ink);
+}
+
+.comb-pkg-btn:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.comb-pkg-btn--selected {
+  background: var(--color-accent-bg);
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-rule));
+  color: var(--color-ink);
+}
+
+.comb-pkg-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 /* Dutch clock */
 .auction-dutch-main {
   display: flex;
@@ -822,12 +873,13 @@ button.mechanism-row:hover .mechanism-arrow {
   .mechanism-row {
     grid-template-columns: var(--space-5) 1fr auto;
     grid-template-rows: auto auto;
-    row-gap: var(--space-1);
+    row-gap: var(--space-2);
   }
 
   .mechanism-name {
     grid-column: 2;
     grid-row: 1;
+    padding-right: var(--space-2);
   }
 
   .mechanism-desc {
@@ -840,5 +892,66 @@ button.mechanism-row:hover .mechanism-arrow {
   .mechanism-badge {
     grid-column: 3;
     grid-row: 1;
+  }
+
+  .intro-title {
+    line-height: 1.2;
+  }
+
+  .intro-params td:first-child {
+    width: 7.5rem;
+    padding-right: var(--space-3);
+  }
+
+  .auction-english-status {
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .auction-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auction-input,
+  .btn-raise,
+  .btn-submit,
+  .btn-call {
+    width: 100%;
+  }
+
+  .comb-pkg-list {
+    grid-template-columns: 1fr;
+  }
+
+  .debrief-bidder-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding-inline: var(--space-5);
+  }
+
+  .content {
+    max-width: 100%;
+  }
+
+  .mechanism-row {
+    grid-template-columns: var(--space-5) minmax(9.5rem, 12rem) minmax(0, 1fr) auto;
+  }
+
+  .auction-header,
+  .intro-header,
+  .menu-header {
+    margin-bottom: var(--space-5);
+  }
+
+  .auction-item-name {
+    line-height: 1.45;
+    max-width: 32ch;
   }
 }
