@@ -8,8 +8,8 @@
     <link rel="stylesheet" href="/auction-sim/style-77375f2dc23afe77.css" integrity="sha384-JnnEk/eAaPqKBEk5WdaxJA4sYYxjtUin0KwAo5LctwMZwKEDhkofTCXEeMo5123F"/>
     
 <script type="module">
-import init, * as bindings from '/auction-sim/auction-web-f2cbae866094615b.js';
-const wasm = await init({ module_or_path: '/auction-sim/auction-web-f2cbae866094615b_bg.wasm' });
+import init, * as bindings from '/auction-sim/auction-web-ac15ae4e0cfce1bc.js';
+const wasm = await init({ module_or_path: '/auction-sim/auction-web-ac15ae4e0cfce1bc_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -18,6 +18,6 @@ window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
-  <link rel="modulepreload" href="/auction-sim/auction-web-f2cbae866094615b.js" crossorigin="anonymous" integrity="sha384-vz2uYE7tcLH3m2K9ysr1gytLlg6TB1h4XPXYSvALPjvDV6PiSZ2d/LBmYHqXnCac"><link rel="preload" href="/auction-sim/auction-web-f2cbae866094615b_bg.wasm" crossorigin="anonymous" integrity="sha384-jEPr0pDMbp3RjdU9qGqbt9b/ADdoy49bB8qq4EGwDs5Xv+9+kD6xBo8RmGHyAdDQ" as="fetch" type="application/wasm"></head>
+  <link rel="modulepreload" href="/auction-sim/auction-web-ac15ae4e0cfce1bc.js" crossorigin="anonymous" integrity="sha384-vz2uYE7tcLH3m2K9ysr1gytLlg6TB1h4XPXYSvALPjvDV6PiSZ2d/LBmYHqXnCac"><link rel="preload" href="/auction-sim/auction-web-ac15ae4e0cfce1bc_bg.wasm" crossorigin="anonymous" integrity="sha384-08+26ih0pE7CDZXDmriRF5ruWnoHcy2P9OEmfzAl2WurTtttdtWWtZ8R8tyzatZe" as="fetch" type="application/wasm"></head>
   <body></body>
 </html>
