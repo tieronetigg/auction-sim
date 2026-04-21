@@ -27,6 +27,8 @@ pub struct DebriefState {
     pub sealed_bids: Vec<(BidderId, Money)>,
     /// AskSubmitted events (Double auction sellers) — revealed at debrief.
     pub sealed_asks: Vec<(BidderId, Money)>,
+    /// PackageBidSubmitted events (Combinatorial/VCG) — (bidder, package_desc, amount).
+    pub package_bids: Vec<(BidderId, String, Money)>,
     pub scroll: u16,
 }
 
@@ -86,6 +88,7 @@ impl DebriefState {
             accepted_bids,
             sealed_bids,
             sealed_asks,
+            package_bids: vec![],
             scroll: 0,
         }
     }
@@ -117,7 +120,9 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
     )]));
     lines.push(Line::from(""));
 
-    if state.auction_type == AuctionType::Double {
+    if matches!(state.auction_type, AuctionType::Combinatorial | AuctionType::Vcg) {
+        render_result_combinatorial(&mut lines, state);
+    } else if state.auction_type == AuctionType::Double {
         // Double auction: multiple trades at a uniform clearing price.
         let n_trades = state.outcome.allocations.len();
         let clearing = state.outcome.payments.first().map(|p| p.amount).unwrap_or(Money::zero());
@@ -253,52 +258,55 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
     )]));
     lines.push(Line::from(""));
 
-    let is_sealed = matches!(
-        state.auction_type,
-        AuctionType::FirstPriceSealedBid | AuctionType::Vickrey | AuctionType::AllPay | AuctionType::Double
-    );
-
-    // Human row.
-    let human_bid = if is_sealed {
-        state
-            .sealed_bids
-            .iter()
-            .find(|(id, _)| *id == state.human_id)
-            .map(|(_, amt)| *amt)
+    if matches!(state.auction_type, AuctionType::Combinatorial | AuctionType::Vcg) {
+        render_bidder_summary_combinatorial(&mut lines, state);
     } else {
-        state
-            .accepted_bids
-            .iter()
-            .filter(|(_, id, _)| *id == state.human_id)
-            .map(|(_, _, amt)| *amt)
-            .last()
-    };
+        let is_sealed = matches!(
+            state.auction_type,
+            AuctionType::FirstPriceSealedBid | AuctionType::Vickrey | AuctionType::AllPay | AuctionType::Double
+        );
 
-    lines.push(format_bidder_row("You", state.human_value, human_bid, false, state));
-
-    for ai in &state.ai_info {
-        let ai_bid = if is_sealed {
-            // For Double auction, sellers' bids are in sealed_asks.
-            let from_asks = state
-                .sealed_asks
-                .iter()
-                .find(|(id, _)| *id == ai.id)
-                .map(|(_, amt)| *amt);
-            let from_bids = state
+        // Human row.
+        let human_bid = if is_sealed {
+            state
                 .sealed_bids
                 .iter()
-                .find(|(id, _)| *id == ai.id)
-                .map(|(_, amt)| *amt);
-            from_bids.or(from_asks)
+                .find(|(id, _)| *id == state.human_id)
+                .map(|(_, amt)| *amt)
         } else {
             state
                 .accepted_bids
                 .iter()
-                .filter(|(_, id, _)| *id == ai.id)
+                .filter(|(_, id, _)| *id == state.human_id)
                 .map(|(_, _, amt)| *amt)
                 .last()
         };
-        lines.push(format_bidder_row(&ai.name, ai.value, ai_bid, true, state));
+
+        lines.push(format_bidder_row("You", state.human_value, human_bid, false, state));
+
+        for ai in &state.ai_info {
+            let ai_bid = if is_sealed {
+                let from_asks = state
+                    .sealed_asks
+                    .iter()
+                    .find(|(id, _)| *id == ai.id)
+                    .map(|(_, amt)| *amt);
+                let from_bids = state
+                    .sealed_bids
+                    .iter()
+                    .find(|(id, _)| *id == ai.id)
+                    .map(|(_, amt)| *amt);
+                from_bids.or(from_asks)
+            } else {
+                state
+                    .accepted_bids
+                    .iter()
+                    .filter(|(_, id, _)| *id == ai.id)
+                    .map(|(_, _, amt)| *amt)
+                    .last()
+            };
+            lines.push(format_bidder_row(&ai.name, ai.value, ai_bid, true, state));
+        }
     }
 
     // ── Theory note ─────────────────────────────────────────────────────────
@@ -316,7 +324,8 @@ pub fn render(frame: &mut Frame, state: &DebriefState) {
         AuctionType::Vickrey => render_theory_vickrey(&mut lines, state),
         AuctionType::AllPay => render_theory_allpay(&mut lines, state),
         AuctionType::Double => render_theory_double(&mut lines, state),
-        _ => {}
+        AuctionType::Combinatorial => render_theory_combinatorial(&mut lines, state),
+        AuctionType::Vcg => render_theory_vcg(&mut lines, state),
     }
 
     let para = Paragraph::new(lines)
@@ -644,6 +653,233 @@ fn render_theory_double(lines: &mut Vec<Line>, state: &DebriefState) {
     )]));
     lines.push(Line::from(vec![Span::styled(
         "  simultaneously efficient and incentive-compatible.",
+        Style::default().fg(Color::DarkGray),
+    )]));
+}
+
+// ── Combinatorial result / bidder summary / theory ────────────────────────────
+
+fn render_result_combinatorial(lines: &mut Vec<Line>, state: &DebriefState) {
+    // Collect unique winning bidder IDs in allocation order.
+    let mut winner_ids: Vec<BidderId> = Vec::new();
+    for alloc in &state.outcome.allocations {
+        if !winner_ids.contains(&alloc.bidder_id) {
+            winner_ids.push(alloc.bidder_id);
+        }
+    }
+
+    if winner_ids.is_empty() {
+        lines.push(Line::from(vec![Span::styled(
+            "  No bids received — nothing allocated.",
+            Style::default().fg(Color::DarkGray),
+        )]));
+    } else {
+        for &wid in &winner_ids {
+            let items: Vec<&str> = state
+                .outcome
+                .allocations
+                .iter()
+                .filter(|a| a.bidder_id == wid)
+                .map(|a| match a.item_id.0 { 0 => "North Wing", 1 => "South Wing", _ => "?" })
+                .collect();
+            let items_str = items.join(" + ");
+            let payment = state
+                .outcome
+                .payments
+                .iter()
+                .find(|p| p.bidder_id == wid)
+                .map(|p| p.amount)
+                .unwrap_or(Money::zero());
+            let name = name_of(wid, state);
+            let is_human = wid == state.human_id;
+            let style = if is_human {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}", name), style),
+                Span::styled(format!(" won {}", items_str), Style::default().fg(Color::White)),
+                Span::styled(format!(" — paid {}", payment), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  Revenue  : ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{}", state.outcome.revenue), Style::default().fg(Color::White)),
+    ]));
+
+    lines.push(Line::from(""));
+    let human_won = winner_ids.contains(&state.human_id);
+    if human_won {
+        let payment = state
+            .outcome
+            .payments
+            .iter()
+            .find(|p| p.bidder_id == state.human_id)
+            .map(|p| p.amount)
+            .unwrap_or(Money::zero());
+        let surplus = state.human_value - payment;
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "  You won — paid {}, value {}, surplus {}",
+                payment, state.human_value, surplus
+            ),
+            Style::default().fg(Color::Cyan),
+        )]));
+    } else {
+        lines.push(Line::from(vec![Span::styled(
+            "  You did not win any items.",
+            Style::default().fg(Color::DarkGray),
+        )]));
+    }
+}
+
+fn render_bidder_summary_combinatorial(lines: &mut Vec<Line>, state: &DebriefState) {
+    let render_row = |lines: &mut Vec<Line>, id: BidderId, name: &str, value: Money| {
+        let pkg_entry = state.package_bids.iter().find(|(bid_id, _, _)| *bid_id == id);
+        let won = state.outcome.allocations.iter().any(|a| a.bidder_id == id);
+        let payment = state
+            .outcome
+            .payments
+            .iter()
+            .find(|p| p.bidder_id == id)
+            .map(|p| p.amount);
+
+        let bid_str = match pkg_entry {
+            Some((_, desc, amt)) => format!("bid {} on {}", amt, desc),
+            None => "no bid".to_string(),
+        };
+
+        let won_str = if won {
+            format!("  WON — paid {}", payment.unwrap_or(Money::zero()))
+        } else {
+            String::new()
+        };
+
+        let is_human = id == state.human_id;
+        let name_style = if is_human {
+            Style::default().fg(Color::Cyan)
+        } else if won {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<8}", name), name_style),
+            Span::styled(
+                format!("  value: {}   {}", value, bid_str),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                won_str,
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+    };
+
+    render_row(lines, state.human_id, "You", state.human_value);
+    for ai in &state.ai_info {
+        render_row(lines, ai.id, &ai.name, ai.value);
+    }
+}
+
+fn render_theory_combinatorial(lines: &mut Vec<Line>, state: &DebriefState) {
+    // Show the welfare-maximising allocation and payment rule.
+    let w_star = state.outcome.revenue; // PAB: revenue = welfare
+    lines.push(Line::from(vec![Span::styled(
+        format!("  Total revenue (sum of winning bids): {}", w_star),
+        Style::default().fg(Color::White),
+    )]));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  Pay-as-bid: each winner pays their own bid — same as FPSB",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  extended to multiple items and bundles.",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  Efficient allocation: the welfare-maximising set of XOR",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  bids was selected (brute-force over all feasible subsets).",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  XOR semantics: at most one bid per bidder is honoured;",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  no two winning packages share an item.",
+        Style::default().fg(Color::DarkGray),
+    )]));
+}
+
+fn render_theory_vcg(lines: &mut Vec<Line>, state: &DebriefState) {
+    lines.push(Line::from(vec![Span::styled(
+        "  VCG PAYMENT:  p_i  =  W*_{-i}  −  (W*  −  v_i)",
+        Style::default().fg(Color::White),
+    )]));
+    lines.push(Line::from(""));
+
+    // Show the human's VCG payment if they won.
+    let human_won = state.outcome.allocations.iter().any(|a| a.bidder_id == state.human_id);
+    if human_won {
+        let payment = state
+            .outcome
+            .payments
+            .iter()
+            .find(|p| p.bidder_id == state.human_id)
+            .map(|p| p.amount)
+            .unwrap_or(Money::zero());
+        let human_bid = state
+            .package_bids
+            .iter()
+            .find(|(id, _, _)| *id == state.human_id)
+            .map(|(_, _, v)| *v)
+            .unwrap_or(Money::zero());
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "  You paid {} — your externality on the other bidders.",
+                payment
+            ),
+            Style::default().fg(Color::Cyan),
+        )]));
+        let surplus = state.human_value - payment;
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "  Your value: {}  Your bid: {}  Surplus: {}",
+                state.human_value, human_bid, surplus
+            ),
+            Style::default().fg(Color::DarkGray),
+        )]));
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(vec![Span::styled(
+        "  Strategy-proof: bidding your true value is weakly dominant.",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  Individual rationality: payment ≤ bid, so winners never",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  regret participating.",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  Budget deficit: VCG revenue may be less than PAB revenue —",
+        Style::default().fg(Color::DarkGray),
+    )]));
+    lines.push(Line::from(vec![Span::styled(
+        "  an external subsidy may be required.",
         Style::default().fg(Color::DarkGray),
     )]));
 }

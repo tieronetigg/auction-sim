@@ -17,6 +17,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         Screen::MainMenu(state) => menu::render(frame, state),
         Screen::AuctionIntro(state) => intro::render(frame, state),
         Screen::LiveAuction(state) => auction::render(frame, state),
+        Screen::CombinatorialAuction(state) => auction::render_combinatorial(frame, state),
         Screen::Debrief(state) => debrief::render(frame, state),
         Screen::Placeholder { title, message } => render_placeholder(frame, title, message),
     }

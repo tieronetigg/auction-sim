@@ -61,11 +61,18 @@ const MECHANISMS: &[Mechanism] = &[
         available: true,
     },
     Mechanism {
-        auction_type: None,
-        name: "Combinatorial",
-        tagline: "Bundle bidding: VCG payments, Clarke pivot rule",
-        dot_type: "stub",
-        available: false,
+        auction_type: Some(AuctionType::Combinatorial),
+        name: "Combinatorial (Pay-as-Bid)",
+        tagline: "Package bids on bundles of items — winner pays their own bid",
+        dot_type: "combinatorial",
+        available: true,
+    },
+    Mechanism {
+        auction_type: Some(AuctionType::Vcg),
+        name: "VCG Mechanism",
+        tagline: "Package bids — each winner pays their externality (strategy-proof)",
+        dot_type: "vcg",
+        available: true,
     },
     Mechanism {
         auction_type: None,

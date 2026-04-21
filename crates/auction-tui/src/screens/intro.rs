@@ -169,6 +169,89 @@ use the equilibrium formula above. After the deadline, all bids are \
 revealed and the winner (highest bidder) receives the item — but \
 everyone pays their bid.";
 
+const COMBINATORIAL_BODY: &str = "\
+HOW IT WORKS
+
+A combinatorial auction lets bidders submit bids on packages (bundles) \
+of multiple items simultaneously. You can bid $80 for item A alone, $70 \
+for item B alone, or $200 for {A, B} together — these are XOR bids: at \
+most one of your bids will be selected.
+
+COMPLEMENTARITIES AND SUBSTITUTES
+
+When items are complements, a bundle is worth more than the sum of its \
+parts. Buying both wings of a building is worth more if you need \
+contiguous space. Substitutes work the opposite way. Combinatorial \
+auctions let bidders express these preferences directly, preventing the \
+\"exposure problem\" of having to win all items or none.
+
+WINNER DETERMINATION
+
+The auctioneer finds the allocation that maximises total value across all \
+submitted bids — subject to: (i) each item goes to at most one bidder, \
+and (ii) at most one bid per bidder is selected (XOR semantics). This is \
+an NP-hard optimisation problem in general; this simulator uses brute \
+force over small instances.
+
+PAYMENT RULE (PAY-AS-BID)
+
+In this game, winners pay exactly their submitted bid. There is no \
+incentive to bid truthfully — shading your bid trades off winning \
+probability against profit margin, just like in a first-price sealed-bid \
+auction.
+
+YOUR SETUP
+
+Two items: North Wing and South Wing of a property. Three AI bidders \
+have fixed private values for individual wings or the full bundle. You \
+have a private value for the bundle. Use Tab to cycle your package \
+selection, then type your bid and press Enter. You have 30 seconds.";
+
+const VCG_BODY: &str = "\
+HOW IT WORKS
+
+The VCG (Vickrey-Clarke-Groves) mechanism extends the Vickrey \
+second-price idea to multi-item settings. As in a combinatorial auction, \
+each bidder submits package bids and the welfare-maximising allocation \
+is chosen. But payments are computed differently.
+
+THE VCG PAYMENT FORMULA
+
+Each winner i pays their externality: the harm their presence imposes \
+on the other bidders:
+
+    p_i  =  W*_{-i}  −  (W*  −  v_i)
+
+where W* is total welfare with everyone, W*_{-i} is total welfare \
+excluding bidder i, and v_i is bidder i's winning bid. In English: \
+your payment equals what others would have gained if you had not \
+participated, minus the value you added beyond your own bid.
+
+STRATEGY-PROOFNESS
+
+Bidding your true value is a weakly dominant strategy in VCG. \
+Deviating can only harm you: understating causes you to lose \
+allocations you should win; overstating can give you items whose VCG \
+cost exceeds your true value.
+
+INDIVIDUAL RATIONALITY
+
+Every winner's VCG payment is at most their stated bid, so winners \
+never regret participating.
+
+BUDGET DEFICIT
+
+VCG revenue may be less than the total welfare generated. The mechanism \
+may need an external subsidy, unlike budget-balanced alternatives (e.g. \
+a k-DA). This is a fundamental trade-off when combining efficiency with \
+incentive-compatibility.
+
+YOUR SETUP
+
+Same scenario as the Combinatorial Auction: two wings, three AI bidders, \
+30 seconds. The only difference is the payment rule — your VCG payment \
+reflects the harm your participation imposes on the other bidders.";
+
 const DOUBLE_BODY: &str = "\
 HOW IT WORKS
 
@@ -240,7 +323,8 @@ impl IntroState {
             AuctionType::Vickrey => VICKREY_BODY,
             AuctionType::AllPay => ALLPAY_BODY,
             AuctionType::Double => DOUBLE_BODY,
-            _ => "No intro available for this auction type.",
+            AuctionType::Combinatorial => COMBINATORIAL_BODY,
+            AuctionType::Vcg => VCG_BODY,
         }
     }
 
@@ -252,7 +336,8 @@ impl IntroState {
             AuctionType::Vickrey => " Vickrey Auction — How It Works ",
             AuctionType::AllPay => " All-Pay Auction — How It Works ",
             AuctionType::Double => " Double Auction (k-DA) — How It Works ",
-            _ => " Auction — How It Works ",
+            AuctionType::Combinatorial => " Combinatorial Auction — How It Works ",
+            AuctionType::Vcg => " VCG Mechanism — How It Works ",
         }
     }
 
@@ -264,7 +349,8 @@ impl IntroState {
             AuctionType::Vickrey => Color::Green,
             AuctionType::AllPay => Color::Yellow,
             AuctionType::Double => Color::Blue,
-            _ => Color::White,
+            AuctionType::Combinatorial => Color::LightGreen,
+            AuctionType::Vcg => Color::LightMagenta,
         }
     }
 }

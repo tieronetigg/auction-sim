@@ -101,3 +101,48 @@ fn phase_bidding_mid_silence() {
     a.tick(2.0); // now elapsed
     assert_eq!(a.phase(), AuctionPhase::Complete);
 }
+
+/// The losing bidder appears in neither allocations nor payments.
+#[test]
+fn loser_has_no_allocation_or_payment() {
+    let mut a = auction(None);
+    a.submit_bid(common::bid(0, 110.0)).unwrap(); // loser
+    a.submit_bid(common::bid(1, 200.0)).unwrap(); // winner
+    a.tick(TIMEOUT + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 1);
+    assert_eq!(outcome.allocations[0].bidder_id.0, 1);
+    assert_eq!(outcome.payments.len(), 1);
+    assert_eq!(outcome.payments[0].bidder_id.0, 1);
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 0));
+}
+
+/// Bid amounts relative to reserve: below → no sale; at and above → sale.
+#[test]
+fn bid_variations_with_reserve() {
+    // (bid_amount, expect_sale)
+    let cases: &[(f64, bool)] = &[(150.0, false), (200.0, true), (350.0, true)];
+    for &(amount, expect_sale) in cases {
+        let mut a = auction(Some(200.0));
+        a.submit_bid(common::bid(0, amount)).unwrap();
+        a.tick(TIMEOUT + 0.1);
+        let outcome = a.outcome().unwrap();
+        if expect_sale {
+            assert!(!outcome.allocations.is_empty(), "bid={amount}: expected sale");
+            assert_eq!(outcome.payments[0].amount, Money(amount), "bid={amount}: wrong payment");
+        } else {
+            assert!(outcome.allocations.is_empty(), "bid={amount}: expected no sale");
+        }
+    }
+}
+
+/// A bid far below the current standing price is rejected with the correct minimum.
+#[test]
+fn bid_far_below_standing_price_rejected() {
+    let mut a = auction(None);
+    a.submit_bid(common::bid(0, 200.0)).unwrap(); // standing at $200
+    // minimum is now 210; bidding $100 must fail
+    let err = a.submit_bid(common::bid(1, 100.0)).unwrap_err();
+    assert_eq!(err, auction_core::bid::BidError::BelowMinimum { minimum: Money(210.0) });
+}

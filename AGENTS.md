@@ -9,6 +9,8 @@ simulations that illustrate mechanisms from simple to advanced, with live AI bid
 per-type theory introductions, and post-round debriefs that reveal values and explain
 key results (revenue equivalence, bid shading, truth dominance, etc.).
 
+Hosted web version: https://tieronetigg.github.io/auction-sim/
+
 ## Commands
 
 ```bash
@@ -162,8 +164,8 @@ English/Dutch), `sealed_bids` (from `BidSubmitted`, FPSB/Vickrey/AllPay), and
 | 4 | ✅ Done | Dutch, FPSB, Vickrey — all playable with per-type intro/debrief |
 | 5 | ✅ Done | Education layer: inline hints, debrief analysis, sparkline chart |
 | 6 | ✅ Done | All-pay + Double auction (k-DA two-sided market) |
-| 7 | ✅ Done | Combinatorial + VCG |
-| 8 | Next   | Persistence + session history + replay |
+| 7 | Next   | Combinatorial + VCG |
+| 8 | —      | Persistence + session history + replay |
 | 9 | —      | SMRA (stretch) |
 
 ## Conventions

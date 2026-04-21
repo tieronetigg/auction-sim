@@ -354,6 +354,7 @@ fn build_debrief_info(s: &AuctionState) -> DebriefInfo {
         bidder_values,
         event_log: s.engine.event_log.clone(),
         reserve_price: s.reserve_price,
+        package_bids: vec![],
     }
 }
 

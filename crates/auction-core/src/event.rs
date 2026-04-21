@@ -1,5 +1,6 @@
 use crate::bid::Bid;
 use crate::outcome::AuctionOutcome;
+use crate::package::PackageBid;
 use crate::types::{BidderId, Money};
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,8 @@ pub enum AuctionEvent {
     BidSubmitted(Bid),
     /// Double-auction acknowledgment: sell order received (amount stays hidden until reveal).
     AskSubmitted(Bid),
+    /// Combinatorial auction: package bid received.
+    PackageBidSubmitted(PackageBid),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -5,4 +5,5 @@ pub mod event;
 pub mod item;
 pub mod mechanism;
 pub mod outcome;
+pub mod package;
 pub mod types;

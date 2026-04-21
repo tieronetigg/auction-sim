@@ -1,10 +1,12 @@
+use auction_core::auction::combinatorial::CombinatorialPaymentRule;
+use auction_core::event::AuctionEvent;
 use auction_core::outcome::AuctionOutcome;
 use auction_core::types::{AuctionPhase, AuctionType, Money};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::screens::auction::{
-    new_allpay_game, new_double_game, new_dutch_game, new_english_game, new_fpsb_game,
-    new_vickrey_game, LiveAuctionState,
+    new_allpay_game, new_combinatorial_game, new_double_game, new_dutch_game, new_english_game,
+    new_fpsb_game, new_vickrey_game, pkg_description, CombinatorialLiveState, LiveAuctionState,
 };
 use crate::screens::debrief::DebriefState;
 use crate::screens::intro::IntroState;
@@ -14,6 +16,7 @@ pub enum Screen {
     MainMenu(MenuState),
     AuctionIntro(IntroState),
     LiveAuction(Box<LiveAuctionState>),
+    CombinatorialAuction(Box<CombinatorialLiveState>),
     Debrief(Box<DebriefState>),
     Placeholder { title: String, message: String },
 }
@@ -39,10 +42,18 @@ impl App {
         if let Screen::LiveAuction(state) = &mut self.screen {
             state.engine.tick(delta);
         }
+        if let Screen::CombinatorialAuction(state) = &mut self.screen {
+            state.elapsed += delta;
+            state.auction.tick(delta);
+        }
 
         let completed = matches!(
             &self.screen,
             Screen::LiveAuction(s) if s.engine.auction.phase() == AuctionPhase::Complete
+        );
+        let comb_completed = matches!(
+            &self.screen,
+            Screen::CombinatorialAuction(s) if s.auction.outcome().is_some()
         );
 
         if completed {
@@ -50,6 +61,12 @@ impl App {
                 std::mem::replace(&mut self.screen, Screen::MainMenu(MenuState::new()))
             {
                 self.screen = Screen::Debrief(Box::new(build_debrief(*live)));
+            }
+        } else if comb_completed {
+            if let Screen::CombinatorialAuction(live) =
+                std::mem::replace(&mut self.screen, Screen::MainMenu(MenuState::new()))
+            {
+                self.screen = Screen::Debrief(Box::new(build_combinatorial_debrief(*live)));
             }
         }
     }
@@ -114,8 +131,7 @@ impl App {
                         KeyEffect::None
                     }
                     KeyCode::Enter | KeyCode::Char(' ') => {
-                        let game = make_game(auction_type);
-                        KeyEffect::GoTo(Screen::LiveAuction(Box::new(game)))
+                        KeyEffect::GoTo(make_game(auction_type))
                     }
                     _ => KeyEffect::None,
                 }
@@ -136,6 +152,14 @@ impl App {
                     | AuctionType::Double => self.handle_sealed_key(key),
                     _ => self.handle_english_key(key),
                 }
+            }
+
+            // ── Combinatorial / VCG auction ───────────────────────────────────
+            Screen::CombinatorialAuction(state) => {
+                if state.auction.outcome().is_some() {
+                    return KeyEffect::None;
+                }
+                self.handle_combinatorial_key(key)
             }
 
             // ── Debrief ──────────────────────────────────────────────────────
@@ -217,6 +241,32 @@ impl App {
         }
         KeyEffect::None
     }
+
+    fn handle_combinatorial_key(&mut self, key: KeyEvent) -> KeyEffect {
+        if let Screen::CombinatorialAuction(state) = &mut self.screen {
+            match key.code {
+                KeyCode::Esc => return KeyEffect::GoTo(Screen::MainMenu(MenuState::new())),
+                KeyCode::Tab => {
+                    state.selected_pkg_idx =
+                        (state.selected_pkg_idx + 1) % state.packages.len();
+                    state.input_error = None;
+                }
+                KeyCode::Char(c) if (c.is_ascii_digit() || c == '.') && !state.bid_submitted => {
+                    state.bid_input.push(c);
+                    state.input_error = None;
+                }
+                KeyCode::Backspace if !state.bid_submitted => {
+                    state.bid_input.pop();
+                    state.input_error = None;
+                }
+                KeyCode::Enter => {
+                    state.submit_human_package_bid();
+                }
+                _ => {}
+            }
+        }
+        KeyEffect::None
+    }
 }
 
 // ── Screen transition enum ────────────────────────────────────────────────────
@@ -229,14 +279,22 @@ enum KeyEffect {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn make_game(auction_type: AuctionType) -> LiveAuctionState {
+fn make_game(auction_type: AuctionType) -> Screen {
     match auction_type {
-        AuctionType::Dutch => new_dutch_game(),
-        AuctionType::FirstPriceSealedBid => new_fpsb_game(),
-        AuctionType::Vickrey => new_vickrey_game(),
-        AuctionType::AllPay => new_allpay_game(),
-        AuctionType::Double => new_double_game(),
-        _ => new_english_game(),
+        AuctionType::Combinatorial => Screen::CombinatorialAuction(Box::new(
+            new_combinatorial_game(CombinatorialPaymentRule::PayAsBid),
+        )),
+        AuctionType::Vcg => Screen::CombinatorialAuction(Box::new(
+            new_combinatorial_game(CombinatorialPaymentRule::Vcg),
+        )),
+        _ => Screen::LiveAuction(Box::new(match auction_type {
+            AuctionType::Dutch => new_dutch_game(),
+            AuctionType::FirstPriceSealedBid => new_fpsb_game(),
+            AuctionType::Vickrey => new_vickrey_game(),
+            AuctionType::AllPay => new_allpay_game(),
+            AuctionType::Double => new_double_game(),
+            _ => new_english_game(),
+        })),
     }
 }
 
@@ -263,4 +321,52 @@ fn build_debrief(live: LiveAuctionState) -> DebriefState {
         live.reserve_price,
         &live.engine.event_log,
     )
+}
+
+fn build_combinatorial_debrief(live: CombinatorialLiveState) -> DebriefState {
+    use crate::screens::auction::AiInfo;
+
+    let outcome = live
+        .auction
+        .outcome()
+        .map(|co| co.outcome.clone())
+        .unwrap_or(AuctionOutcome {
+            allocations: vec![],
+            payments: vec![],
+            receipts: vec![],
+            revenue: Money::zero(),
+            social_welfare: None,
+            efficiency: None,
+        });
+
+    let package_bids: Vec<(auction_core::types::BidderId, String, Money)> = live
+        .event_log
+        .iter()
+        .filter_map(|(_, e)| match e {
+            AuctionEvent::PackageBidSubmitted(pb) => {
+                Some((pb.bidder_id, pkg_description(&pb.package), pb.value))
+            }
+            _ => None,
+        })
+        .collect();
+
+    let ai_info: Vec<AiInfo> = live
+        .ai_info
+        .iter()
+        .map(|a| AiInfo { id: a.id, name: a.name.clone(), value: a.value })
+        .collect();
+
+    DebriefState {
+        outcome,
+        auction_type: live.auction_type,
+        human_id: live.human_id,
+        human_value: live.human_value,
+        ai_info,
+        reserve_price: None,
+        accepted_bids: vec![],
+        sealed_bids: vec![],
+        sealed_asks: vec![],
+        package_bids,
+        scroll: 0,
+    }
 }

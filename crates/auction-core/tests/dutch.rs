@@ -61,3 +61,39 @@ fn no_bids_after_close() {
     let err = a.submit_bid(common::bid(1, 1.0)).unwrap_err();
     assert_eq!(err, auction_core::bid::BidError::AuctionNotActive);
 }
+
+/// Non-calling bidders appear in neither allocations nor payments.
+#[test]
+fn non_caller_has_no_allocation_or_payment() {
+    let mut a = auction();
+    a.tick(20.0); // price drops to $300
+    a.submit_bid(common::bid(0, 1.0)).unwrap(); // only bidder 0 calls
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 1);
+    assert_eq!(outcome.allocations[0].bidder_id.0, 0);
+    assert_eq!(outcome.payments.len(), 1);
+    assert_eq!(outcome.payments[0].bidder_id.0, 0);
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 1));
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 2));
+}
+
+/// Payment always equals the clock price at the moment of the call, not the bid amount.
+#[test]
+fn bid_variations_payment_matches_clock() {
+    // (seconds ticked before call, expected clock price)
+    let cases: &[(f64, f64)] = &[(0.0, 500.0), (10.0, 400.0), (30.0, 200.0)];
+    for &(ticks, expected_payment) in cases {
+        let mut a = auction();
+        if ticks > 0.0 {
+            a.tick(ticks);
+        }
+        a.submit_bid(common::bid(0, 1.0)).unwrap();
+        let outcome = a.outcome().unwrap();
+        assert_eq!(
+            outcome.payments[0].amount,
+            Money(expected_payment),
+            "after {ticks}s tick expected ${expected_payment}"
+        );
+    }
+}

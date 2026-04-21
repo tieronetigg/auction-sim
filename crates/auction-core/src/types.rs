@@ -49,7 +49,7 @@ impl fmt::Display for BidderId {
 }
 
 /// Opaque item identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemId(pub u32);
 
 /// Simulated time in seconds.

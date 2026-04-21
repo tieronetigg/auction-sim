@@ -3,6 +3,9 @@ use auction_ai::seller::TruthfulSellerBidder;
 use auction_ai::shading::BidShadingBidder;
 use auction_ai::truthful::TruthfulBidder;
 use auction_core::auction::all_pay::{AllPayAuction, AllPayConfig};
+use auction_core::auction::combinatorial::{
+    CombinatorialAuction, CombinatorialConfig, CombinatorialError, CombinatorialPaymentRule,
+};
 use auction_core::auction::double::{DoubleAuction, DoubleAuctionConfig};
 use auction_core::auction::dutch::{DutchAuction, DutchConfig};
 use auction_core::auction::english::{EnglishAuction, EnglishConfig};
@@ -11,7 +14,8 @@ use auction_core::bid::BidError;
 use auction_core::bidder::BidderStrategy;
 use auction_core::event::AuctionEvent;
 use auction_core::item::Item;
-use auction_core::types::{AuctionPhase, AuctionType, BidderId, ItemId, Money};
+use auction_core::package::Package;
+use auction_core::types::{AuctionPhase, AuctionType, BidderId, ItemId, Money, SimTime};
 use auction_education::{live_hint, price_series, HintLevel};
 use auction_engine::engine::{BidderConfig, SimulationEngine};
 use ratatui::{
@@ -1720,6 +1724,431 @@ fn render_status_double(frame: &mut Frame, state: &LiveAuctionState, area: Rect)
     ]);
 
     frame.render_widget(Paragraph::new(vec![line1, line2]), inner);
+}
+
+// ─────────────────────────────────────────────
+// Combinatorial / VCG auction state
+// ─────────────────────────────────────────────
+
+const COMBINATORIAL_DEADLINE: f64 = 30.0;
+
+pub struct CombinatorialAiInfo {
+    pub id: BidderId,
+    pub name: String,
+    pub package_desc: String,
+    pub value: Money,
+}
+
+pub struct CombinatorialLiveState {
+    pub auction: CombinatorialAuction,
+    pub auction_type: AuctionType,
+    pub human_id: BidderId,
+    pub human_value: Money,
+    pub ai_info: Vec<CombinatorialAiInfo>,
+    /// Available packages for human to bid on: (label, Package).
+    pub packages: Vec<(String, Package)>,
+    pub selected_pkg_idx: usize,
+    pub bid_input: String,
+    pub input_error: Option<String>,
+    pub bid_submitted: bool,
+    pub event_log: Vec<(SimTime, AuctionEvent)>,
+    pub elapsed: f64,
+}
+
+impl CombinatorialLiveState {
+    pub fn submit_human_package_bid(&mut self) -> bool {
+        if self.bid_submitted {
+            self.input_error = Some("You have already submitted a bid.".to_string());
+            return false;
+        }
+        let trimmed = self.bid_input.trim().to_string();
+        if trimmed.is_empty() {
+            self.input_error = Some("Enter an amount first.".to_string());
+            return false;
+        }
+        match trimmed.parse::<f64>() {
+            Ok(amount) if amount > 0.0 => {
+                let pkg = self.packages[self.selected_pkg_idx].1.clone();
+                match self.auction.submit_package_bid(self.human_id, pkg, Money(amount)) {
+                    Ok(event) => {
+                        self.event_log.push((self.elapsed, event));
+                        self.bid_input.clear();
+                        self.input_error = None;
+                        self.bid_submitted = true;
+                        true
+                    }
+                    Err(CombinatorialError::AuctionClosed) => {
+                        self.input_error = Some("Auction has closed.".to_string());
+                        false
+                    }
+                    Err(_) => {
+                        self.input_error = Some("Bid rejected.".to_string());
+                        false
+                    }
+                }
+            }
+            _ => {
+                self.input_error = Some("Enter a valid positive number.".to_string());
+                false
+            }
+        }
+    }
+}
+
+/// Converts a Package's items to a short human-readable label.
+pub fn pkg_description(pkg: &Package) -> String {
+    let items: Vec<&str> = pkg.0.iter().map(|i| match i.0 {
+        0 => "N",
+        1 => "S",
+        _ => "?",
+    }).collect();
+    format!("{{{}}}", items.join(","))
+}
+
+// ─────────────────────────────────────────────
+// Combinatorial game constructor
+// ─────────────────────────────────────────────
+
+/// Combinatorial auction game: North Wing + South Wing, 3 AI bidders.
+pub fn new_combinatorial_game(rule: CombinatorialPaymentRule) -> CombinatorialLiveState {
+    let human_id = BidderId(0);
+    let human_value = Money(100.0);
+
+    let all_bidder_ids = vec![BidderId(0), BidderId(1), BidderId(2), BidderId(3)];
+    let mut auction = CombinatorialAuction::new(
+        CombinatorialConfig { payment_rule: rule, deadline: COMBINATORIAL_DEADLINE },
+        all_bidder_ids,
+    );
+
+    // Pre-submit AI bids: Alice{N}=$20, Bob{S}=$15, Carol{N,S}=$40
+    let mut event_log: Vec<(SimTime, AuctionEvent)> = Vec::new();
+    let ai_bids: &[(BidderId, &[u32], f64)] = &[
+        (BidderId(1), &[0], 20.0),
+        (BidderId(2), &[1], 15.0),
+        (BidderId(3), &[0, 1], 40.0),
+    ];
+    for &(id, items, value) in ai_bids {
+        let pkg = Package(items.iter().copied().map(ItemId).collect());
+        if let Ok(event) = auction.submit_package_bid(id, pkg, Money(value)) {
+            event_log.push((0.0, event));
+        }
+    }
+
+    let auction_type = match rule {
+        CombinatorialPaymentRule::PayAsBid => AuctionType::Combinatorial,
+        CombinatorialPaymentRule::Vcg => AuctionType::Vcg,
+    };
+
+    let ai_info = vec![
+        CombinatorialAiInfo {
+            id: BidderId(1), name: "Alice".into(),
+            package_desc: "North Wing".into(), value: Money(20.0),
+        },
+        CombinatorialAiInfo {
+            id: BidderId(2), name: "Bob".into(),
+            package_desc: "South Wing".into(), value: Money(15.0),
+        },
+        CombinatorialAiInfo {
+            id: BidderId(3), name: "Carol".into(),
+            package_desc: "Both Wings".into(), value: Money(40.0),
+        },
+    ];
+
+    let packages = vec![
+        (
+            "North Wing only  {N}".into(),
+            Package([ItemId(0)].iter().copied().collect()),
+        ),
+        (
+            "South Wing only  {S}".into(),
+            Package([ItemId(1)].iter().copied().collect()),
+        ),
+        (
+            "Both Wings       {N,S}".into(),
+            Package([ItemId(0), ItemId(1)].iter().copied().collect()),
+        ),
+    ];
+
+    CombinatorialLiveState {
+        auction,
+        auction_type,
+        human_id,
+        human_value,
+        ai_info,
+        packages,
+        selected_pkg_idx: 2,
+        bid_input: String::new(),
+        input_error: None,
+        bid_submitted: false,
+        event_log,
+        elapsed: 0.0,
+    }
+}
+
+// ─────────────────────────────────────────────
+// Combinatorial auction renderer
+// ─────────────────────────────────────────────
+
+pub fn render_combinatorial(frame: &mut Frame, state: &CombinatorialLiveState) {
+    let area = frame.size();
+    let closed = state.auction.outcome().is_some();
+
+    let border_color = match state.auction_type {
+        AuctionType::Vcg => Color::LightMagenta,
+        _ => Color::LightGreen,
+    };
+    let label = match state.auction_type {
+        AuctionType::Vcg => "VCG Mechanism",
+        _ => "Combinatorial Auction (Pay-as-Bid)",
+    };
+    let title = if closed {
+        format!(" {} — CLOSED ", label)
+    } else {
+        format!(" {} — Real Estate Wings ", label)
+    };
+
+    let outer = Block::default()
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let vert = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(6),
+            Constraint::Length(3),
+            Constraint::Length(3),
+        ])
+        .split(inner);
+
+    let horiz = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+        .split(vert[0]);
+
+    render_combinatorial_packages(frame, state, horiz[0]);
+    render_combinatorial_bidders(frame, state, horiz[1]);
+    render_combinatorial_status(frame, state, vert[1]);
+    render_combinatorial_input(frame, state, vert[2]);
+}
+
+fn render_combinatorial_packages(frame: &mut Frame, state: &CombinatorialLiveState, area: Rect) {
+    let block = Block::default()
+        .title(" Your Packages (Tab to select) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let closed = state.auction.outcome().is_some();
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    let human_pkg = state.event_log.iter().find_map(|(_, e)| match e {
+        AuctionEvent::PackageBidSubmitted(pb) if pb.bidder_id == state.human_id => {
+            Some(pb.package.clone())
+        }
+        _ => None,
+    });
+
+    for (i, (label, pkg)) in state.packages.iter().enumerate() {
+        let is_selected = i == state.selected_pkg_idx;
+        let is_submitted = human_pkg.as_ref() == Some(pkg);
+
+        let cursor = if closed {
+            if is_submitted { "→" } else { " " }
+        } else if is_selected {
+            "▶"
+        } else {
+            " "
+        };
+
+        let style = if is_selected && !closed {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else if is_submitted {
+            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let bid_marker = if is_submitted {
+            if let Some(bid) = state.event_log.iter().find_map(|(_, e)| match e {
+                AuctionEvent::PackageBidSubmitted(pb) if pb.bidder_id == state.human_id => {
+                    Some(pb.value)
+                }
+                _ => None,
+            }) {
+                format!("  bid: {}", bid)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {} ", cursor), style),
+            Span::styled(label.clone(), style),
+            Span::styled(bid_marker, Style::default().fg(Color::Green)),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        format!("  Your value {{N,S}}: {}", state.human_value),
+        Style::default().fg(Color::DarkGray),
+    )]));
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_combinatorial_bidders(frame: &mut Frame, state: &CombinatorialLiveState, area: Rect) {
+    let block = Block::default()
+        .title(" AI Bidders ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let closed = state.auction.outcome().is_some();
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    for ai in &state.ai_info {
+        let (name_style, val_style) = if closed {
+            (
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::DarkGray),
+            )
+        } else {
+            (
+                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Color::DarkGray),
+            )
+        };
+
+        let val_text = if closed {
+            format!("val: {}  (bid sealed)", ai.value)
+        } else {
+            "bid sealed".to_string()
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<7}", ai.name), name_style),
+            Span::styled(format!("  {:<12}", ai.package_desc), Style::default().fg(Color::DarkGray)),
+            Span::styled(val_text, val_style),
+        ]));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_combinatorial_status(frame: &mut Frame, state: &CombinatorialLiveState, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+        .border_style(Style::default().fg(Color::DarkGray));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let closed = state.auction.outcome().is_some();
+    let remaining = (COMBINATORIAL_DEADLINE - state.elapsed).max(0.0);
+
+    let timer_style = if closed {
+        Style::default().fg(Color::DarkGray)
+    } else if remaining < 5.0 {
+        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+    };
+
+    let line1 = Line::from(vec![
+        Span::styled("  Time remaining: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            if closed { "CLOSED".to_string() } else { format!("{:.1}s", remaining) },
+            timer_style,
+        ),
+        Span::styled("    Your value for {N,S}: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("{}", state.human_value), Style::default().fg(Color::Cyan)),
+    ]);
+
+    let mechanism = match state.auction_type {
+        AuctionType::Vcg => "VCG (pay externality)",
+        _ => "Pay-as-bid",
+    };
+    let line2 = Line::from(vec![
+        Span::styled("  Mechanism: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(mechanism, Style::default().fg(Color::White)),
+        Span::styled("    Bids: sealed until deadline", Style::default().fg(Color::DarkGray)),
+    ]);
+
+    frame.render_widget(Paragraph::new(vec![line1, line2]), inner);
+}
+
+fn render_combinatorial_input(frame: &mut Frame, state: &CombinatorialLiveState, area: Rect) {
+    let closed = state.auction.outcome().is_some();
+    let border_color = if closed {
+        Color::DarkGray
+    } else if state.bid_submitted {
+        Color::Green
+    } else {
+        match state.auction_type {
+            AuctionType::Vcg => Color::LightMagenta,
+            _ => Color::LightGreen,
+        }
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    if closed {
+        frame.render_widget(
+            Paragraph::new("  Auction closed — press any key to see results")
+                .style(Style::default().fg(Color::DarkGray)),
+            inner,
+        );
+        return;
+    }
+
+    if state.bid_submitted {
+        frame.render_widget(
+            Paragraph::new("  Your bid is sealed. Waiting for the deadline...")
+                .style(Style::default().fg(Color::Green)),
+            inner,
+        );
+        return;
+    }
+
+    let pkg_label = &state.packages[state.selected_pkg_idx].0;
+
+    let prompt = if let Some(err) = &state.input_error {
+        Line::from(vec![
+            Span::styled("  ! ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(err.as_str(), Style::default().fg(Color::Red)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(
+                "  Tab — cycle package  |  Enter — submit bid  |  Esc — quit   Selected: ",
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(pkg_label.trim().to_string(), Style::default().fg(Color::Cyan)),
+        ])
+    };
+
+    let input_line = Line::from(Span::styled(
+        format!("  $ {}|", state.bid_input),
+        Style::default().fg(border_color).add_modifier(Modifier::BOLD),
+    ));
+
+    frame.render_widget(Paragraph::new(vec![prompt, input_line]), inner);
 }
 
 fn render_input_sealed(frame: &mut Frame, state: &LiveAuctionState, area: Rect) {

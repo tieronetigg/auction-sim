@@ -7,6 +7,7 @@ use yew::prelude::*;
 
 use crate::screens::{
     auction::AuctionScreen,
+    combinatorial::CombinatorialAuctionScreen,
     debrief::DebriefScreen,
     intro::IntroScreen,
     menu::MenuScreen,
@@ -27,6 +28,8 @@ pub struct DebriefInfo {
     pub bidder_values: Vec<Money>,
     pub event_log: Vec<(f64, AuctionEvent)>,
     pub reserve_price: Option<Money>,
+    /// Package bids from combinatorial/VCG auctions — (bidder, package_desc, amount).
+    pub package_bids: Vec<(BidderId, String, Money)>,
 }
 
 /// Debrief data is write-once; treat any two instances as equal to suppress
@@ -41,6 +44,7 @@ pub enum Screen {
     Menu,
     Intro(AuctionType),
     Auction(AuctionType),
+    CombinatorialAuction(AuctionType),
     Debrief(Rc<DebriefInfo>),
 }
 
@@ -62,6 +66,9 @@ pub fn App() -> Html {
         },
         Screen::Auction(auction_type) => html! {
             <AuctionScreen {auction_type} on_navigate={navigate} />
+        },
+        Screen::CombinatorialAuction(auction_type) => html! {
+            <CombinatorialAuctionScreen {auction_type} on_navigate={navigate} />
         },
         Screen::Debrief(info) => html! {
             <DebriefScreen {info} on_navigate={navigate} />

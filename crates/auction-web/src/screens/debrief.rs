@@ -28,7 +28,8 @@ pub fn DebriefScreen(props: &DebriefScreenProps) -> Html {
         AuctionType::Vickrey           => "vickrey",
         AuctionType::AllPay            => "allpay",
         AuctionType::Double            => "double",
-        _                              => "stub",
+        AuctionType::Combinatorial     => "combinatorial",
+        AuctionType::Vcg               => "vcg",
     };
     let mechanism_label = dot_type.to_uppercase();
 
@@ -116,6 +117,10 @@ pub fn DebriefScreen(props: &DebriefScreenProps) -> Html {
         v
     };
 
+    let is_combinatorial = matches!(
+        info.auction_type,
+        AuctionType::Combinatorial | AuctionType::Vcg
+    );
     let is_sealed = matches!(
         info.auction_type,
         AuctionType::FirstPriceSealedBid | AuctionType::Vickrey | AuctionType::AllPay | AuctionType::Double
@@ -137,24 +142,28 @@ pub fn DebriefScreen(props: &DebriefScreenProps) -> Html {
                 // ── RESULT ─────────────────────────────────────────────────
                 <div class="debrief-section">
                     <p class="debrief-section-label">{ "Result" }</p>
-                    <p class="debrief-result-winner">{ &result_summary }</p>
-                    if winner_payment.is_some() {
-                        <p class="debrief-result-price num">{ &price_display }</p>
-                    }
-                    if let Some(r) = info.reserve_price {
-                        <p class="debrief-surplus">{ format!("Reserve: {}", r) }</p>
-                    }
-                    if human_won {
-                        <p class="debrief-surplus">
-                            { format!("Your surplus: {} − {} = {}",
-                                info.human_value, human_payment, human_surplus) }
-                        </p>
-                    } else if info.auction_type == AuctionType::AllPay && human_payment.0 > 0.0 {
-                        <p class="debrief-surplus">
-                            { format!("You paid {} and did not win.", human_payment) }
-                        </p>
+                    if is_combinatorial {
+                        { combinatorial_result(info) }
                     } else {
-                        <p class="debrief-surplus">{ "You did not win." }</p>
+                        <p class="debrief-result-winner">{ &result_summary }</p>
+                        if winner_payment.is_some() {
+                            <p class="debrief-result-price num">{ &price_display }</p>
+                        }
+                        if let Some(r) = info.reserve_price {
+                            <p class="debrief-surplus">{ format!("Reserve: {}", r) }</p>
+                        }
+                        if human_won {
+                            <p class="debrief-surplus">
+                                { format!("Your surplus: {} − {} = {}",
+                                    info.human_value, human_payment, human_surplus) }
+                            </p>
+                        } else if info.auction_type == AuctionType::AllPay && human_payment.0 > 0.0 {
+                            <p class="debrief-surplus">
+                                { format!("You paid {} and did not win.", human_payment) }
+                            </p>
+                        } else {
+                            <p class="debrief-surplus">{ "You did not win." }</p>
+                        }
                     }
                 </div>
 
@@ -177,14 +186,20 @@ pub fn DebriefScreen(props: &DebriefScreenProps) -> Html {
                 // ── BIDDER REVEAL ──────────────────────────────────────────
                 <div class="debrief-section">
                     <p class="debrief-section-label">
-                        { if is_sealed { "Sealed bids revealed" } else { "Bids placed" } }
+                        { if is_combinatorial { "Package bids revealed" }
+                          else if is_sealed { "Sealed bids revealed" }
+                          else { "Bids placed" } }
                     </p>
-                    { bidder_table(
-                        info,
-                        winner_id,
-                        if is_double { &sealed_asks } else { &[] },
-                        if is_sealed { &sealed_bids } else { &accepted },
-                    ) }
+                    if is_combinatorial {
+                        { package_bid_table(info) }
+                    } else {
+                        { bidder_table(
+                            info,
+                            winner_id,
+                            if is_double { &sealed_asks } else { &[] },
+                            if is_sealed { &sealed_bids } else { &accepted },
+                        ) }
+                    }
                 </div>
 
                 <div class="debrief-actions">
@@ -252,6 +267,104 @@ fn bidder_table(
     }
 }
 
+// ── Combinatorial result ──────────────────────────────────────────────────────
+
+fn combinatorial_result(info: &DebriefInfo) -> Html {
+    if info.outcome.allocations.is_empty() {
+        return html! { <p class="debrief-surplus">{ "No allocations — no bids exceeded reserve." }</p> };
+    }
+
+    // Group allocations by bidder_id
+    let mut by_bidder: std::collections::HashMap<BidderId, Vec<u32>> = std::collections::HashMap::new();
+    for alloc in &info.outcome.allocations {
+        by_bidder.entry(alloc.bidder_id).or_default().push(alloc.item_id.0);
+    }
+
+    let human_won = by_bidder.contains_key(&info.human_id);
+    let human_payment = info.outcome.payments.iter()
+        .find(|p| p.bidder_id == info.human_id)
+        .map(|p| p.amount)
+        .unwrap_or(Money(0.0));
+
+    let winner_rows: Vec<Html> = {
+        let mut entries: Vec<_> = by_bidder.iter().collect();
+        entries.sort_by_key(|(id, _)| id.0);
+        entries.iter().map(|(id, items)| {
+            let name = if **id == info.human_id { "You".to_string() }
+                else { info.bidder_names.get(id.0 as usize).cloned().unwrap_or_else(|| format!("Bidder {}", id.0)) };
+            let item_str: Vec<&str> = items.iter().map(|i| match i { 0 => "N", 1 => "S", _ => "?" }).collect();
+            let pkg = format!("{{{}}}", item_str.join(","));
+            let payment = info.outcome.payments.iter()
+                .find(|p| p.bidder_id == **id)
+                .map(|p| format!("{}", p.amount))
+                .unwrap_or_else(|| "—".to_string());
+            html! {
+                <tr>
+                    <td>{ name }</td>
+                    <td>{ pkg }</td>
+                    <td class="num">{ payment }</td>
+                </tr>
+            }
+        }).collect()
+    };
+
+    let revenue = info.outcome.revenue;
+
+    html! {
+        <>
+            <table class="debrief-bidder-table">
+                <thead><tr><th>{ "Winner" }</th><th>{ "Package" }</th><th>{ "Paid" }</th></tr></thead>
+                <tbody>{ for winner_rows.into_iter() }</tbody>
+            </table>
+            <p class="debrief-surplus">{ format!("Total revenue: {}", revenue) }</p>
+            if human_won {
+                <p class="debrief-surplus">
+                    { format!("Your surplus: {} − {} = {}", info.human_value, human_payment, info.human_value - human_payment) }
+                </p>
+            } else {
+                <p class="debrief-surplus">{ "You did not win." }</p>
+            }
+        </>
+    }
+}
+
+// ── Package bid table ─────────────────────────────────────────────────────────
+
+fn package_bid_table(info: &DebriefInfo) -> Html {
+    let winner_ids: std::collections::HashSet<BidderId> = info.outcome.allocations.iter()
+        .map(|a| a.bidder_id)
+        .collect();
+
+    let rows: Vec<Html> = info.package_bids.iter().map(|(id, pkg_desc, amount)| {
+        let name = if *id == info.human_id { "You (you)".to_string() }
+            else { info.bidder_names.get(id.0 as usize).cloned().unwrap_or_else(|| format!("Bidder {}", id.0)) };
+        let is_winner = winner_ids.contains(id);
+        let row_cls = if is_winner { "is-winner" } else { "" };
+        html! {
+            <tr class={row_cls}>
+                <td>{ name }</td>
+                <td>{ pkg_desc.clone() }</td>
+                <td class="num">{ format!("{}", amount) }</td>
+                <td>{ if is_winner { "winner" } else { "" } }</td>
+            </tr>
+        }
+    }).collect();
+
+    html! {
+        <table class="debrief-bidder-table">
+            <thead>
+                <tr>
+                    <th>{ "Bidder" }</th>
+                    <th>{ "Package" }</th>
+                    <th>{ "Bid" }</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>{ for rows.into_iter() }</tbody>
+        </table>
+    }
+}
+
 // ── Theory snippets ───────────────────────────────────────────────────────────
 
 fn theory_for(t: AuctionType) -> &'static str {
@@ -289,6 +402,17 @@ fn theory_for(t: AuctionType) -> &'static str {
              last matching pair. Myerson-Satterthwaite shows no budget-balanced mechanism \
              can be simultaneously efficient and incentive-compatible in bilateral trade — \
              the double auction trades off these properties.",
-        _ => "Theory note not available for this mechanism.",
+        AuctionType::Combinatorial =>
+            "A combinatorial auction lets bidders express package values directly, avoiding \
+             the exposure problem. XOR semantics mean at most one of your bids is selected. \
+             The auctioneer solves the winner-determination problem to maximise social welfare. \
+             With pay-as-bid payment, there is no dominant strategy — bid shading applies \
+             just as in FPSB.",
+        AuctionType::Vcg =>
+            "VCG (Vickrey-Clarke-Groves) selects the welfare-maximising allocation and \
+             charges each winner their externality: the welfare others lose because you \
+             participated. Bidding your true value is a weakly dominant strategy. \
+             VCG may run a budget deficit — revenue can be less than the sum of winners' \
+             stated values — and is the multi-item generalisation of the Vickrey mechanism.",
     }
 }

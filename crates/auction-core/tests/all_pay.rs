@@ -14,6 +14,14 @@ fn auction() -> AllPayAuction {
     )
 }
 
+fn auction_with_reserve(reserve: f64) -> AllPayAuction {
+    AllPayAuction::new(
+        AllPayConfig { deadline: DEADLINE, reserve_price: Some(Money(reserve)) },
+        common::item(None),
+        common::ids(4),
+    )
+}
+
 /// Every bidder who submitted a bid appears in `outcome.payments`,
 /// regardless of whether they won. This is the invariant that `.first()` breaks.
 #[test]
@@ -86,4 +94,54 @@ fn no_bids_empty_outcome() {
     assert!(outcome.allocations.is_empty());
     assert!(outcome.payments.is_empty());
     assert_eq!(outcome.revenue, Money::zero());
+}
+
+/// Reserve not met → no allocation, but every submitted bid is still lost.
+#[test]
+fn reserve_not_met_no_allocation_but_all_pay() {
+    let mut a = auction_with_reserve(100.0);
+    a.submit_bid(common::bid(0, 30.0)).unwrap();
+    a.submit_bid(common::bid(1, 50.0)).unwrap();
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert!(outcome.allocations.is_empty(), "reserve not met → no allocation");
+    assert_eq!(outcome.payments.len(), 2, "both bidders still pay");
+    assert_eq!(outcome.revenue, Money(80.0));
+}
+
+/// Revenue equals the sum of all bids across single, equal, and spread configurations.
+#[test]
+fn bid_variations_revenue_is_sum() {
+    let cases: &[&[f64]] = &[&[100.0], &[50.0, 50.0], &[1.0, 999.0]];
+    for &amounts in cases {
+        let mut a = AllPayAuction::new(
+            AllPayConfig { deadline: DEADLINE, reserve_price: None },
+            common::item(None),
+            common::ids(amounts.len() as u32),
+        );
+        let expected: f64 = amounts.iter().sum();
+        for (i, &amount) in amounts.iter().enumerate() {
+            a.submit_bid(common::bid(i as u32, amount)).unwrap();
+        }
+        a.tick(DEADLINE + 0.1);
+        let outcome = a.outcome().unwrap();
+        assert_eq!(outcome.revenue, Money(expected), "amounts={amounts:?}");
+    }
+}
+
+/// A loser who bid above the reserve still pays when a higher bidder wins.
+#[test]
+fn loser_above_reserve_still_pays() {
+    let mut a = auction_with_reserve(100.0);
+    a.submit_bid(common::bid(0, 150.0)).unwrap(); // loser — above reserve but below winner
+    a.submit_bid(common::bid(1, 200.0)).unwrap(); // winner
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 1);
+    assert_eq!(outcome.allocations[0].bidder_id.0, 1);
+    // Loser still has a payment entry
+    let loser_pay = outcome.payments.iter().find(|p| p.bidder_id.0 == 0).unwrap();
+    assert_eq!(loser_pay.amount, Money(150.0));
 }

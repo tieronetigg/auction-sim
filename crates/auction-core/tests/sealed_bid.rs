@@ -114,3 +114,102 @@ fn no_outcome_before_deadline() {
     a.tick(2.0);
     assert!(a.outcome().is_some());
 }
+
+// ── FPSB additional ───────────────────────────────────────────────────────────
+
+/// Losers are absent from both allocations and payments in FPSB.
+#[test]
+fn fpsb_loser_has_no_allocation() {
+    let mut a = fpsb(None);
+    a.submit_bid(common::bid(0, 100.0)).unwrap(); // loser
+    a.submit_bid(common::bid(1, 200.0)).unwrap(); // loser
+    a.submit_bid(common::bid(2, 300.0)).unwrap(); // winner
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 1);
+    assert_eq!(outcome.allocations[0].bidder_id.0, 2);
+    assert_eq!(outcome.payments.len(), 1);
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 0));
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 1));
+}
+
+/// In a FPSB tie, the first submitter wins (Vec::sort_by is stable).
+#[test]
+fn fpsb_tie_first_submitter_wins() {
+    let mut a = fpsb(None);
+    a.submit_bid(common::bid(0, 200.0)).unwrap(); // submitted first
+    a.submit_bid(common::bid(1, 200.0)).unwrap(); // same amount, submitted second
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations[0].bidder_id.0, 0, "first submitter wins on tie");
+}
+
+/// Bid amounts vs reserve: below → no sale; at/above → sale with correct payment.
+#[test]
+fn fpsb_bid_variations() {
+    let cases: &[(f64, f64, bool)] = &[
+        (150.0, 200.0, false), // below reserve → no sale
+        (200.0, 200.0, true),  // at reserve → sale, pays $200
+        (350.0, 200.0, true),  // above reserve → sale, pays $350
+    ];
+    for &(bid_amount, reserve, expect_sale) in cases {
+        let mut a = fpsb(Some(reserve));
+        a.submit_bid(common::bid(0, bid_amount)).unwrap();
+        a.tick(DEADLINE + 0.1);
+        let outcome = a.outcome().unwrap();
+        if expect_sale {
+            assert_eq!(outcome.allocations.len(), 1, "bid={bid_amount}");
+            assert_eq!(outcome.payments[0].amount, Money(bid_amount), "bid={bid_amount}");
+        } else {
+            assert!(outcome.allocations.is_empty(), "bid={bid_amount}");
+            assert!(outcome.payments.is_empty(), "bid={bid_amount}");
+        }
+    }
+}
+
+// ── Vickrey additional ────────────────────────────────────────────────────────
+
+/// Losers are absent from both allocations and payments in Vickrey.
+#[test]
+fn vickrey_loser_has_no_allocation() {
+    let mut a = vickrey(None);
+    a.submit_bid(common::bid(0, 100.0)).unwrap();
+    a.submit_bid(common::bid(1, 200.0)).unwrap();
+    a.submit_bid(common::bid(2, 300.0)).unwrap(); // winner
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 1);
+    assert_eq!(outcome.allocations[0].bidder_id.0, 2);
+    assert_eq!(outcome.payments.len(), 1);
+    assert_eq!(outcome.payments[0].bidder_id.0, 2);
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 0));
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 1));
+}
+
+/// Single bidder, no reserve → winner pays $0 (no second price exists).
+#[test]
+fn vickrey_single_bidder_no_reserve_pays_zero() {
+    let mut a = vickrey(None);
+    a.submit_bid(common::bid(0, 300.0)).unwrap();
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations[0].bidder_id.0, 0);
+    assert_eq!(outcome.payments[0].amount, Money(0.0));
+}
+
+/// In a Vickrey tie, the first submitter wins and pays the tied second price.
+#[test]
+fn vickrey_tie_first_submitter_wins() {
+    let mut a = vickrey(None);
+    a.submit_bid(common::bid(0, 200.0)).unwrap(); // first — wins
+    a.submit_bid(common::bid(1, 200.0)).unwrap(); // second
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations[0].bidder_id.0, 0, "first submitter wins");
+    assert_eq!(outcome.payments[0].amount, Money(200.0), "second price = tied amount");
+}

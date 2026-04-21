@@ -189,13 +189,60 @@ fn content_for(auction_type: AuctionType) -> IntroContent {
                 ("k",         "0.5  (midpoint clearing)"),
             ],
         },
-        _ => IntroContent {
-            name: "Auction",
-            dot_type: "stub",
-            tagline: "",
-            body: &["This mechanism is not yet implemented."],
-            key_fact: "",
-            params: &[],
+        AuctionType::Combinatorial => IntroContent {
+            name: "Combinatorial Auction (Pay-as-Bid)",
+            dot_type: "combinatorial",
+            tagline: "Bundle bids on multiple items — winner pays their own bid",
+            body: &[
+                "A combinatorial auction lets bidders submit bids on packages \
+                 (bundles) of multiple items simultaneously. Bids use XOR semantics: \
+                 at most one of your bids will be selected. You can bid on the North \
+                 Wing alone, the South Wing alone, or both wings together.",
+                "Complementarities: a bundle of complementary items is worth more \
+                 than the sum of its parts. Combinatorial auctions let bidders express \
+                 this directly, avoiding the exposure problem of having to win all \
+                 items or none.",
+                "Payment rule: each winner pays exactly their own submitted bid \
+                 (pay-as-bid). The welfare-maximising allocation is found by brute force. \
+                 This gives no incentive to bid truthfully — just like FPSB.",
+            ],
+            key_fact: "XOR semantics: at most one package bid per bidder is selected, \
+                       and no two winning packages may share an item.",
+            params: &[
+                ("Items",      "North Wing (N) + South Wing (S)"),
+                ("Your value", "$100 for {N,S} bundle"),
+                ("AI bidders", "Alice {N}=$20, Bob {S}=$15, Carol {N,S}=$40"),
+                ("Deadline",   "30 s"),
+                ("Payment",    "Pay-as-bid"),
+            ],
+        },
+        AuctionType::Vcg => IntroContent {
+            name: "VCG Mechanism",
+            dot_type: "vcg",
+            tagline: "Package bids — each winner pays their externality",
+            body: &[
+                "VCG (Vickrey-Clarke-Groves) selects the welfare-maximising allocation \
+                 just like a combinatorial auction, but computes payments differently. \
+                 Each winner pays the externality they impose on others: \
+                 p_i = W*_{-i} − (W* − v_i)",
+                "Strategy-proofness: bidding your true value is a weakly dominant strategy. \
+                 Deviating can only hurt you — understating your value may cause you to lose \
+                 a profitable allocation; overstating may cause you to win an item whose \
+                 VCG payment exceeds your true value.",
+                "Budget deficit: VCG revenue may be less than the winner's bids, \
+                 requiring an external subsidy. Individual rationality is guaranteed: \
+                 each winner's payment is at most their stated bid.",
+            ],
+            key_fact: "VCG is the multi-item generalisation of the Vickrey mechanism. \
+                       Your payment equals the benefit others would gain if you had not \
+                       participated.",
+            params: &[
+                ("Items",      "North Wing (N) + South Wing (S)"),
+                ("Your value", "$100 for {N,S} bundle"),
+                ("AI bidders", "Alice {N}=$20, Bob {S}=$15, Carol {N,S}=$40"),
+                ("Deadline",   "30 s"),
+                ("Payment",    "VCG externality"),
+            ],
         },
     }
 }
@@ -215,7 +262,13 @@ pub fn IntroScreen(props: &IntroScreenProps) -> Html {
     let go_start = {
         let on_navigate = props.on_navigate.clone();
         Callback::from(move |_: MouseEvent| {
-            on_navigate.emit(Screen::Auction(auction_type));
+            let screen = match auction_type {
+                AuctionType::Combinatorial | AuctionType::Vcg => {
+                    Screen::CombinatorialAuction(auction_type)
+                }
+                _ => Screen::Auction(auction_type),
+            };
+            on_navigate.emit(screen);
         })
     };
 

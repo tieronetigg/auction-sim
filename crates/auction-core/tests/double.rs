@@ -134,3 +134,66 @@ fn revenue_equals_clearing_times_trades() {
     assert_eq!(outcome.allocations.len(), 2);
     assert_eq!(outcome.revenue, Money(160.0)); // 2 × $80
 }
+
+/// Unmatched buyer (bid below marginal ask) has no allocation or payment entry.
+#[test]
+fn unmatched_buyer_has_no_allocation() {
+    // 3 buyers ($120, $100, $60), 3 sellers ($50, $80, $110) → 2 trades.
+    // Buyer 2 ($60) is unmatched; sellers sorted: $50, $80, $110.
+    // Marginal pair: $100 bid vs $80 ask. Buyer $60 < $110 ask → unmatched.
+    let mut a = auction(3, 3);
+    a.submit_bid(buyer_bid(0, 120.0)).unwrap();
+    a.submit_bid(buyer_bid(1, 100.0)).unwrap();
+    a.submit_bid(buyer_bid(2, 60.0)).unwrap();  // unmatched
+    a.submit_bid(seller_ask(3, 0, 50.0)).unwrap();
+    a.submit_bid(seller_ask(3, 1, 80.0)).unwrap();
+    a.submit_bid(seller_ask(3, 2, 110.0)).unwrap();
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.allocations.len(), 2);
+    assert!(!outcome.allocations.iter().any(|al| al.bidder_id.0 == 2));
+    assert!(!outcome.payments.iter().any(|p| p.bidder_id.0 == 2));
+}
+
+/// Unmatched seller (ask above marginal bid) has no receipt entry.
+#[test]
+fn unmatched_seller_has_no_receipt() {
+    // Same crossing setup; seller with ask=$110 (BidderId(5)) is unmatched.
+    let mut a = auction(3, 3);
+    a.submit_bid(buyer_bid(0, 120.0)).unwrap();
+    a.submit_bid(buyer_bid(1, 100.0)).unwrap();
+    a.submit_bid(buyer_bid(2, 60.0)).unwrap();
+    a.submit_bid(seller_ask(3, 0, 50.0)).unwrap();
+    a.submit_bid(seller_ask(3, 1, 80.0)).unwrap();
+    a.submit_bid(seller_ask(3, 2, 110.0)).unwrap(); // unmatched — BidderId(5)
+    a.tick(DEADLINE + 0.1);
+
+    let outcome = a.outcome().unwrap();
+    assert_eq!(outcome.receipts.len(), 2);
+    assert!(!outcome.receipts.iter().any(|r| r.bidder_id.0 == 5));
+}
+
+/// Buyer below all asks → no trade; buyer above marginal ask → one trade.
+#[test]
+fn double_bid_variations() {
+    // No trade: buyer $50 < seller $80
+    {
+        let mut a = auction(1, 1);
+        a.submit_bid(buyer_bid(0, 50.0)).unwrap();
+        a.submit_bid(seller_ask(1, 0, 80.0)).unwrap();
+        a.tick(DEADLINE + 0.1);
+        let o = a.outcome().unwrap();
+        assert!(o.allocations.is_empty(), "50<80: no trade expected");
+    }
+    // One trade: buyer $120 > seller $80, clearing = (120+80)/2 = $100
+    {
+        let mut a = auction(1, 1);
+        a.submit_bid(buyer_bid(0, 120.0)).unwrap();
+        a.submit_bid(seller_ask(1, 0, 80.0)).unwrap();
+        a.tick(DEADLINE + 0.1);
+        let o = a.outcome().unwrap();
+        assert_eq!(o.allocations.len(), 1, "120>80: 1 trade expected");
+        assert_eq!(o.payments[0].amount, Money(100.0), "clearing=(120+80)/2");
+    }
+}
